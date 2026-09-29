@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">My Launcher</string>
+    <string name="accessibility_service_label">My Launcher 通知シェード操作</string>
+    <string name="accessibility_service_description">ホーム画面の下スワイプジェスチャーでAndroid標準の通知シェードを開くためにのみ使用します。画面内容の読み取りや収集は一切行いません。</string>
+</resources>
