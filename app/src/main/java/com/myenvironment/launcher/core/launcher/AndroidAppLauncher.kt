@@ -188,6 +188,17 @@ class AndroidAppLauncher(
         }
     }
 
+    override fun openUsageAccessSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            appContext.startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(appContext, "使用状況へのアクセス設定を開けませんでした", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun openDefaultHomeSettings() {
         try {
             val intent = Intent(Settings.ACTION_HOME_SETTINGS).apply {

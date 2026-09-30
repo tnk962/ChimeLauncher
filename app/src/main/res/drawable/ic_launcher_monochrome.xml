@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 3枚のパネル -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M36.2,37.5 L42.8,37.5 A2.8,2.8 0 0,1 45.6,40.3 L45.6,65.2 A2.8,2.8 0 0,1 42.8,68.0 L36.2,68.0 A2.8,2.8 0 0,1 33.4,65.2 L33.4,40.3 A2.8,2.8 0 0,1 36.2,37.5 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M50.5,28.0 L57.5,28.0 A3.1,3.1 0 0,1 60.6,31.1 L60.6,65.2 A3.1,3.1 0 0,1 57.5,68.3 L50.5,68.3 A3.1,3.1 0 0,1 47.4,65.2 L47.4,31.1 A3.1,3.1 0 0,1 50.5,28.0 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M65.2,35.5 L71.8,35.5 A2.8,2.8 0 0,1 74.6,38.3 L74.6,65.2 A2.8,2.8 0 0,1 71.8,68.0 L65.2,68.0 A2.8,2.8 0 0,1 62.4,65.2 L62.4,38.3 A2.8,2.8 0 0,1 65.2,35.5 Z" />
+
+    <!-- 軌道とドット -->
+    <group
+        android:pivotX="54"
+        android:pivotY="53"
+        android:rotation="-14">
+        <path
+            android:pathData="M84,53 A30,11.5 0 1,1 24,53 A30,11.5 0 1,1 84,53"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="2.0" />
+    </group>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M26.5,58.8m-2.5,0a2.5,2.5 0,1 0,5.0 0a2.5,2.5 0,1 0,-5.0 0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M61.5,61.8m-2.8,0a2.8,2.8 0,1 0,5.6 0a2.8,2.8 0,1 0,-5.6 0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M81.8,46.2m-2.2,0a2.2,2.2 0,1 0,4.4 0a2.2,2.2 0,1 0,-4.4 0" />
+
+    <!-- 水平な地平線 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M24,72.4h60v1.4h-60z" />
+</vector>

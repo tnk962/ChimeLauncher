@@ -7,47 +7,68 @@ import com.myenvironment.launcher.core.model.LayoutItem
 import java.util.Locale
 
 /**
- * Swipe Up Search 用の検索エンジン実装 (仕様 8.2, 9)
+ * Swipe Up Search 用の検索エンジン実装 (仕様 8.2, 9, Chime Launcher 仕様 21〜27)
  *
- * 検索優先順位:
- * 1. インストール済みアプリ (前方一致 -> 部分一致 -> パッケージ名一致)
- * 2. Launcherショートカット
- * 3. Launcher独自Action
- * 4. Web検索 (Googleで「検索文字列」を検索)
+ * - Zero Query State (`query.isBlank()`):
+ *   - `Recently Used` / `Frequently Used` / `Recently Installed` を構築して返す。
+ * - 文字入力後 (`query.isNotBlank()`):
+ *   - ゼロクエリ候補と検索結果を混在させず、通常のアプリ検索を最優先する (仕様 26)。
+ *   - 基本順位 (仕様 27):
+ *     1. Exact match (1000)
+ *     2. Prefix match (800)
+ *     3. Token / Partial match (単語先頭一致=650, 部分一致=600, パッケージ名一致=400)
+ *     4. Usage frequency (同一一致度ティア内で 0..90 点の軽いボーナスを加算し、名前一致度を逆転させない)
  */
 class DefaultSearchEngine : SearchEngine {
 
     override fun search(
         query: String,
         installedApps: List<AppInfo>,
-        configuredShortcuts: List<LayoutItem>
+        configuredShortcuts: List<LayoutItem>,
+        usageMap: Map<String, AppUsageMetric>,
+        nowMillis: Long
     ): SearchResultGroup {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
-            // 未入力時は全アプリ一覧とActionを返し、そのままスクロールして選べるようにする
+            val zeroQuery = AppUsageAnalyzer.computeZeroQuerySections(
+                installedApps = installedApps,
+                usageMap = usageMap,
+                nowMillis = nowMillis
+            )
             return SearchResultGroup(
                 query = "",
                 matchingApps = installedApps,
                 matchingShortcuts = configuredShortcuts.filter { it.type == ItemType.SHORTCUT },
                 matchingActions = LauncherAction.entries,
-                webSearchQuery = ""
+                webSearchQuery = "",
+                zeroQuerySections = zeroQuery
             )
         }
 
         val normalizedQuery = trimmed.lowercase(Locale.ROOT)
+        val wordBoundaryRegex = Regex("""[\s._\-/]+""")
 
-        // 1. インストール済みアプリ検索（スコア順：完全一致 > 前方一致 > ラベル部分一致 > パッケージ名一致）
+        // 1. インストール済みアプリ検索（1. Exact > 2. Prefix > 3. Token/Partial > 4. Usage frequency）
         val scoredApps = installedApps.mapNotNull { app ->
             val labelLower = app.label.lowercase(Locale.ROOT)
             val pkgLower = app.packageName.lowercase(Locale.ROOT)
-            val score = when {
-                labelLower == normalizedQuery -> 100
-                labelLower.startsWith(normalizedQuery) -> 80
-                labelLower.contains(normalizedQuery) -> 60
-                pkgLower.contains(normalizedQuery) -> 40
+            val tokens = labelLower.split(wordBoundaryRegex).filter { it.isNotBlank() }
+
+            val baseMatchScore = when {
+                labelLower == normalizedQuery -> 1000
+                labelLower.startsWith(normalizedQuery) -> 800
+                tokens.any { it.startsWith(normalizedQuery) } -> 650
+                labelLower.contains(normalizedQuery) -> 600
+                pkgLower.contains(normalizedQuery) -> 400
                 else -> 0
             }
-            if (score > 0) app to score else null
+
+            if (baseMatchScore > 0) {
+                val usageBonus = usageMap[app.packageName]?.searchRankingBonus ?: 0
+                app to (baseMatchScore + usageBonus)
+            } else {
+                null
+            }
         }.sortedWith(
             compareByDescending<Pair<AppInfo, Int>> { it.second }
                 .thenBy { it.first.label }
@@ -74,7 +95,8 @@ class DefaultSearchEngine : SearchEngine {
             matchingApps = scoredApps,
             matchingShortcuts = shortcuts,
             matchingActions = actions,
-            webSearchQuery = trimmed
+            webSearchQuery = trimmed,
+            zeroQuerySections = ZeroQueryAppSections()
         )
     }
 }

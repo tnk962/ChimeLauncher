@@ -1,6 +1,29 @@
 # Changelog
 
-本プロジェクト（My Launcher）の変更履歴を記録します。
+本プロジェクト（**Chime Launcher**）の変更履歴を記録します。
+
+---
+
+## [1.0.0] - 2026-09-30 (Build 10) — Chime Launcher 正式リリース
+
+### Added & Changed
+- **正式ブランド名称統一 (`Chime Launcher`)**:
+  - アプリ名称・設定画面ヘッダー・アクセシビリティ表示名・バックアップファイル名（`chime_launcher_backup.json`）をすべて正式名称 **Chime Launcher** に統一。
+  - ブランドコンセプト **"Chimeは通知しない。気づかせる。 (Chime Moments are ambient, not interruptive.)"** に基づくアンビエントUXを確立。
+- **新アプリアイコン & Adaptive Icon 対応**:
+  - 採用デザイン（深いブルーの空・水平な地平線と中央の朝焼けの光・Discover/Apps/Homeを象徴する中央が最も高い3枚の青〜シアン〜ミント系パネル・周囲を巡る軌道と暖色発光ドット）を正式アイコンとして組み込み。
+  - Android 8.0+ Adaptive Icon (`mipmap-anydpi-v26/ic_launcher.xml`, `ic_launcher_round.xml`, `ic_launcher_background.xml`, `ic_launcher_foreground.xml`, `ic_launcher_monochrome.xml`)、全解像度ラスタPNG (`mipmap-mdpi`〜`xxxhdpi`)、および Google Play 用 512×512 PNG (`app/src/main/ic_launcher-playstore.png`) を完備。
+- **Chime Moments (`First Chime` / `Return Chime` / `Time Chime`)**:
+  - 通知やポップアップで操作を邪魔せず、ホーム画面下部の **ページインジケーターのみ** で節目を静かに表現する `ChimeController` を実装（優先順位：`First Chime > Return Chime > Time Chime`、同タイミング時は `First Chime` のみ再生）。
+  - **First Chime**: その日 (`yyyy-MM-dd`) 初めてホーム画面を表示した際に1度だけ、現在位置のインジケーターから静かな二重の波紋 (`• ((●)) •`, 約1650ms) を広げてフェードアウト。
+  - **Return Chime**: 一定時間以上（初期値 `1時間`、設定で `30分 / 1時間 / 3時間 / 6時間` に変更可能）離れてからホーム画面へ戻った際、インジケーター間の細い接続ラインとドット間隔の穏やかな呼吸 (`• ───── ● ───── •`, 約1750ms) で経過時間を表現。
+  - **Time Chime**: 朝 (`05:00–10:59`)・昼 (`11:00–16:59`)・夕方 (`17:00–19:59`)・夜 (`20:00–23:59`)・深夜 (`00:00–04:59`) の時間帯に応じて、ページインジケーターのアクティブ色を微細に変化。
+  - Android システムのアニメーション無効化 / 視差効果を減らす (`ANIMATOR_DURATION_SCALE == 0f`) 設定時は、拡大アニメーションを省略し短時間の明度変化へ自動フォールバック。
+- **ページインジケーター 3スタイル切替 (`Dots` / `Icons` / `Text`)**:
+  - `Chime Launcher 設定` → `表示 (Indicator Style)` から **Dots**（標準デフォルト：`•  •  ●  •  •`）、**Icons**（`Discover` / `All Apps` / `Home` / `Settings` アイコン）、**Text**（`Discover` / `Apps` / `1` / `2` / `Settings`）をいつでも切替可能に。高さ固定 (`30.dp`) によりモード切替やChime再生時も周囲レイアウトが一切ズレない構造を実現。
+- **アプリ検索の Zero Query State 強化 & 利用頻度順ランキング**:
+  - 検索オーバーレイを開いた直後（文字未入力時）に **Recently Used（最近使ったアプリ）**、**Frequently Used（よく使うアプリ）**、**Recently Installed（最近インストールしたアプリ）** の最大3セクション（1行4アプリアイコン、空セクションは自動非表示）を表示。
+  - `UsageStatsManager`（権限未付与時はランチャー内起動履歴へ自動フォールバック）＋ `PackageInfo.firstInstallTime` を統合した `AppUsageRepository` を新設し、文字入力時の検索結果も「1. 完全一致 → 2. 前方一致 → 3. 部分一致 → 4. 利用頻度ボーナス」でソート。
 
 ---
 

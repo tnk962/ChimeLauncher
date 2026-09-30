@@ -11,17 +11,22 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.myenvironment.launcher.AppContainer
 import com.myenvironment.launcher.accessibility.NotificationShadeService
+import com.myenvironment.launcher.core.chime.ChimeEvent
+import com.myenvironment.launcher.core.chime.TimeSegment
 import com.myenvironment.launcher.core.launcher.MissingAppResolver
 import com.myenvironment.launcher.core.model.AppInfo
 import com.myenvironment.launcher.core.model.BackupSnapshotSummary
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.DockItem
 import com.myenvironment.launcher.core.model.GridPosition
+import com.myenvironment.launcher.core.model.IndicatorStyle
 import com.myenvironment.launcher.core.model.ItemType
 import com.myenvironment.launcher.core.model.LauncherAction
 import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.core.model.LauncherSettings
 import com.myenvironment.launcher.core.model.LayoutItem
+import com.myenvironment.launcher.core.model.ReturnChimeInterval
+import com.myenvironment.launcher.core.search.AppUsageMetric
 import com.myenvironment.launcher.core.widget.WidgetProviderCatalogItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,6 +36,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -95,16 +101,20 @@ data class OverlayControlState(
     val resizingWidgetTarget: LayoutItem? = null,
     val itemPickerTarget: ItemPickerTarget? = null,
     val jsonPreviewContent: String? = null,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val activeChimeEvent: ChimeEvent? = null,
+    val currentTimeSegment: TimeSegment = TimeSegment.DAY
 )
 
 /**
- * Launcher全体の統合UIステート
+ * Chime Launcher 全体の統合UIステート
  */
 data class LauncherUiState(
     val installedApps: List<AppInfo> = emptyList(),
     val installedPackages: Set<String> = emptySet(),
     val availableWidgets: List<WidgetProviderCatalogItem> = emptyList(),
+    val usageMetrics: Map<String, AppUsageMetric> = emptyMap(),
+    val hasUsageAccessPermission: Boolean = true,
     val pages: List<LauncherPage> = listOf(
         LauncherPage.FIXED_DISCOVER,
         LauncherPage.FIXED_ALL_APPS,
@@ -128,6 +138,8 @@ class LauncherViewModel(
     private val layoutRepository = container.layoutRepository
     private val settingsRepository = container.settingsRepository
     private val backupManager = container.backupManager
+    val appUsageRepository = container.appUsageRepository
+    val chimeController = container.chimeController
     val widgetHostManager = container.widgetHostManager
     val searchEngine = container.searchEngine
     val feedBridge = container.feedBridge
@@ -161,8 +173,12 @@ class LauncherViewModel(
             backupManager.savedSnapshots,
             overlayState,
             availableWidgetsState
-        ) { snaps, overlay, widgets -> Triple(snaps, overlay, widgets) }
-    ) { (apps, pkgs, uPages), (items, dock, settings), (snaps, overlay, widgets) ->
+        ) { snaps, overlay, widgets -> Triple(snaps, overlay, widgets) },
+        combine(
+            appUsageRepository.usageMetrics,
+            appUsageRepository.hasUsageAccessPermission
+        ) { usage, hasUsagePerm -> usage to hasUsagePerm }
+    ) { (apps, pkgs, uPages), (items, dock, settings), (snaps, overlay, widgets), (usage, hasUsagePerm) ->
         val fixedLeftAndHome = buildList {
             if (settings.discoverMode != DiscoverMode.DISABLED) {
                 add(LauncherPage.FIXED_DISCOVER)
@@ -170,7 +186,7 @@ class LauncherViewModel(
             add(LauncherPage.FIXED_ALL_APPS)
             add(LauncherPage.FIXED_HOME)
         }
-        // 一番右にスワイプした時にマイランチャー設定ページが出るように末尾へ配置
+        // 一番右にスワイプした時に Chime Launcher 設定ページが出るように末尾へ配置
         val allPages = fixedLeftAndHome + uPages.sortedBy { it.sortOrder } + LauncherPage.FIXED_SETTINGS
         val homeIdx = allPages.indexOfFirst { it.id == LauncherPage.PAGE_ID_HOME }.coerceAtLeast(0)
 
@@ -178,6 +194,8 @@ class LauncherViewModel(
             installedApps = apps,
             installedPackages = pkgs,
             availableWidgets = widgets,
+            usageMetrics = usage,
+            hasUsageAccessPermission = hasUsagePerm,
             pages = allPages,
             userPages = uPages.sortedBy { it.sortOrder },
             homePageIndex = homeIdx,
@@ -216,7 +234,56 @@ class LauncherViewModel(
     }
 
     /**
-     * AndroidのHome操作が実行された際、すべてのオーバーレイを閉じてHOMEページへ戻す (仕様 4)
+     * Chime Launcher がフォアグラウンドに表示された際、Chime Moments (First / Return / Time) を判定し、
+     * 検索用の利用統計キャッシュもバックグラウンド更新する (仕様 6〜10, 29, 30, 37)
+     */
+    fun onLauncherResumed(nowMillis: Long = System.currentTimeMillis()) {
+        appUsageRepository.refreshUsageStatsAsync(force = false)
+        viewModelScope.launch {
+            val currentSettings = settingsRepository.settings.first()
+            val lastFirstDate = settingsRepository.lastFirstChimeDate.first()
+            val lastVisibleTs = settingsRepository.lastLauncherVisibleTimestamp.first()
+
+            val evaluation = chimeController.evaluateOnHomeVisible(
+                nowMillis = nowMillis,
+                lastFirstChimeDate = lastFirstDate,
+                lastLauncherVisibleTimestamp = lastVisibleTs,
+                settings = currentSettings
+            )
+
+            overlayState.update { state ->
+                state.copy(
+                    currentTimeSegment = evaluation.timeSegment,
+                    activeChimeEvent = evaluation.event ?: state.activeChimeEvent
+                )
+            }
+
+            if (evaluation.updatedLastFirstChimeDate != lastFirstDate) {
+                settingsRepository.setLastFirstChimeDate(evaluation.updatedLastFirstChimeDate)
+            }
+            settingsRepository.setLastLauncherVisibleTimestamp(evaluation.updatedLastVisibleTimestamp)
+        }
+    }
+
+    /**
+     * Chime Launcher から別アプリやスリープへ離れた際のタイムスタンプを記録する (Return Chime 計測用: 仕様 9, 28)
+     */
+    fun onLauncherPaused(nowMillis: Long = System.currentTimeMillis()) {
+        viewModelScope.launch {
+            settingsRepository.setLastLauncherVisibleTimestamp(nowMillis)
+        }
+    }
+
+    /**
+     * ページインジケーターでの Chime Moments アニメーション完了通知
+     */
+    fun onChimeAnimationFinished() {
+        overlayState.update { it.copy(activeChimeEvent = null) }
+    }
+
+    /**
+     * AndroidのHome操作が実行された際、すべてのオーバーレイを閉じてHOMEページへ戻す (仕様 4, 30)
+     * ※通常のホーム遷移では毎回ハプティックや音を追加せず、Chime条件成立時のみ静かに反応する
      */
     fun onHomeGestureInvoked() {
         overlayState.update {
@@ -235,6 +302,7 @@ class LauncherViewModel(
             )
         }
         _pageNavigationEvents.tryEmit(LauncherPage.PAGE_ID_HOME)
+        onLauncherResumed()
     }
 
     fun jumpToPage(pageId: String) {
@@ -312,6 +380,10 @@ class LauncherViewModel(
         appLauncher.openAccessibilitySettings()
     }
 
+    fun openUsageAccessSettings() {
+        appLauncher.openUsageAccessSettings()
+    }
+
     fun openDefaultHomeSettings() {
         appLauncher.openDefaultHomeSettings()
     }
@@ -331,6 +403,8 @@ class LauncherViewModel(
                     val launched = appLauncher.launchApp(item.packageName, item.activityName)
                     if (!launched) {
                         overlayState.update { it.copy(missingAppDialogTarget = item) }
+                    } else {
+                        appUsageRepository.recordAppLaunch(item.packageName)
                     }
                 }
             }
@@ -370,7 +444,10 @@ class LauncherViewModel(
                         )
                     }
                 } else {
-                    appLauncher.launchApp(item.packageName, item.activityName)
+                    val launched = appLauncher.launchApp(item.packageName, item.activityName)
+                    if (launched) {
+                        appUsageRepository.recordAppLaunch(item.packageName)
+                    }
                 }
             }
             ItemType.SHORTCUT -> {
@@ -386,7 +463,10 @@ class LauncherViewModel(
     }
 
     fun launchApp(app: AppInfo) {
-        appLauncher.launchApp(app)
+        val launched = appLauncher.launchApp(app)
+        if (launched) {
+            appUsageRepository.recordAppLaunch(app.packageName)
+        }
     }
 
     fun launchGoogleSearch(query: String) {
@@ -1259,6 +1339,36 @@ class LauncherViewModel(
     fun setAllAppsLeftOnlyInExpandedSingle(leftOnly: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAllAppsLeftOnlyInExpandedSingle(leftOnly)
+        }
+    }
+
+    fun setIndicatorStyle(style: IndicatorStyle) {
+        viewModelScope.launch {
+            settingsRepository.setIndicatorStyle(style)
+        }
+    }
+
+    fun setFirstChimeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setFirstChimeEnabled(enabled)
+        }
+    }
+
+    fun setReturnChimeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setReturnChimeEnabled(enabled)
+        }
+    }
+
+    fun setReturnChimeInterval(interval: ReturnChimeInterval) {
+        viewModelScope.launch {
+            settingsRepository.setReturnChimeInterval(interval)
+        }
+    }
+
+    fun setTimeChimeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setTimeChimeEnabled(enabled)
         }
     }
 

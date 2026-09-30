@@ -62,10 +62,12 @@ import com.myenvironment.launcher.accessibility.NotificationShadeService
 import com.myenvironment.launcher.core.model.BackupSnapshotSummary
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
+import com.myenvironment.launcher.core.model.IndicatorStyle
 import com.myenvironment.launcher.core.model.LauncherSettings
+import com.myenvironment.launcher.core.model.ReturnChimeInterval
 
 /**
- * Launcher 設定および Backup & Restore 画面 (仕様 7.2, 10.2, 15, 22, 23, 29, 45)
+ * Chime Launcher 設定および Backup & Restore 画面 (仕様 2, 6〜20, 33)
  *
  * 一番右端のページ (Page Settings) として常設表示されるほか、オーバーレイとしても表示可能。
  */
@@ -75,6 +77,7 @@ fun SettingsScreen(
     snapshots: List<BackupSnapshotSummary>,
     statusMessage: String?,
     isEmbeddedPage: Boolean = false,
+    hasUsageAccessPermission: Boolean = false,
     onClearStatusMessage: () -> Unit,
     onToggleLayoutLock: (Boolean) -> Unit,
     onUpdateCompactGrid: (Int, Int) -> Unit,
@@ -82,8 +85,14 @@ fun SettingsScreen(
     onUpdateTinyIcons: (Int, Int, Int, Boolean) -> Unit,
     onSelectExpandedLayoutMode: (ExpandedPageLayoutMode) -> Unit,
     onToggleAllAppsLeftOnlyInExpanded: (Boolean) -> Unit,
+    onSelectIndicatorStyle: (IndicatorStyle) -> Unit = {},
+    onToggleFirstChime: (Boolean) -> Unit = {},
+    onToggleReturnChime: (Boolean) -> Unit = {},
+    onSelectReturnChimeInterval: (ReturnChimeInterval) -> Unit = {},
+    onToggleTimeChime: (Boolean) -> Unit = {},
     onToggleSwipeDownNotification: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
+    onOpenUsageAccessSettings: () -> Unit = {},
     onOpenDefaultHomeSettings: () -> Unit,
     onSelectDiscoverMode: (DiscoverMode) -> Unit,
     onSaveSnapshot: (String?) -> Unit,
@@ -155,7 +164,7 @@ fun SettingsScreen(
                     }
                     Column {
                         Text(
-                            text = "My Launcher 設定",
+                            text = "Chime Launcher 設定",
                             style = MaterialTheme.typography.titleLarge,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
@@ -190,6 +199,173 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
+            // 0-A. 表示 / Indicator Style (仕様 12〜18, 33)
+            SettingsSectionCard(title = "表示 (Indicator Style)") {
+                Text(
+                    text = "ホーム画面下部のページインジケーターの表示スタイルを選択します。",
+                    color = Color(0xFFBDC1C6),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                IndicatorStyle.entries.forEach { style ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectIndicatorStyle(style) }
+                            .padding(vertical = 4.dp)
+                    ) {
+                        RadioButton(
+                            selected = settings.indicatorStyle == style,
+                            onClick = { onSelectIndicatorStyle(style) }
+                        )
+                        Column(modifier = Modifier.padding(start = 6.dp)) {
+                            Text(
+                                text = style.displayName,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = style.description,
+                                color = Color(0xFF9AA0A6),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 0-B. Chime Moments 設定 (仕様 3, 6〜11, 33)
+            SettingsSectionCard(title = "Chime Moments") {
+                Text(
+                    text = "Chimeは通知しない。気づかせる。 (Chime Moments are ambient, not interruptive.)",
+                    color = Color(0xFF9AD4EE),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "ポップアップや通知を出さず、ページインジケーターの微細な変化だけで1日の節目を静かに伝えます。",
+                    color = Color(0xFF9AA0A6),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+                )
+
+                // First Chime
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "First Chime",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "その日初めてホーム画面を表示した際、現在位置に短い波紋を1度だけ表示します",
+                            fontSize = 11.sp,
+                            color = Color(0xFF9AA0A6)
+                        )
+                    }
+                    Switch(
+                        checked = settings.firstChimeEnabled,
+                        onCheckedChange = onToggleFirstChime
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0x22FFFFFF))
+
+                // Return Chime
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Return Chime",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "一定時間以上離れてからホームへ戻った際、インジケーターの伸縮で時間の経過を表現します",
+                            fontSize = 11.sp,
+                            color = Color(0xFF9AA0A6)
+                        )
+                    }
+                    Switch(
+                        checked = settings.returnChimeEnabled,
+                        onCheckedChange = onToggleReturnChime
+                    )
+                }
+
+                if (settings.returnChimeEnabled) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Returnまでの時間: ${settings.returnChimeInterval.displayName}",
+                        color = Color(0xFFD5DCE6),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                    ) {
+                        ReturnChimeInterval.entries.forEach { interval ->
+                            val isSelected = settings.returnChimeInterval == interval
+                            if (isSelected) {
+                                FilledTonalButton(
+                                    onClick = { onSelectReturnChimeInterval(interval) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(interval.displayName, fontSize = 11.sp, maxLines = 1)
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onSelectReturnChimeInterval(interval) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(interval.displayName, fontSize = 11.sp, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0x22FFFFFF))
+
+                // Time Chime
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Time Chime",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "朝・昼・夕方・夜・深夜の時間帯に応じてインジケーターの灯りを微細に変化させます",
+                            fontSize = 11.sp,
+                            color = Color(0xFF9AA0A6)
+                        )
+                    }
+                    Switch(
+                        checked = settings.timeChimeEnabled,
+                        onCheckedChange = onToggleTimeChime
                     )
                 }
             }
@@ -522,7 +698,7 @@ fun SettingsScreen(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            exportLauncher.launch("my_launcher_backup.json")
+                            exportLauncher.launch("chime_launcher_backup.json")
                         },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -636,7 +812,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 7. 標準ホームアプリ & Placeholder 検証
+            // 7. 標準ホームアプリ & システム連携ツール
             SettingsSectionCard(title = "システム設定 & ツール") {
                 Button(
                     onClick = onOpenDefaultHomeSettings,
@@ -645,6 +821,21 @@ fun SettingsScreen(
                     Icon(Icons.Default.Home, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("デフォルトのホームアプリを選択")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                FilledTonalButton(
+                    onClick = onOpenUsageAccessSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (hasUsageAccessPermission) {
+                            "✓ 使用状況へのアクセス (検索 Recently/Frequently 連携): 有効"
+                        } else {
+                            "使用状況へのアクセスを許可 (検索の最近・高頻度精度を向上)"
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -701,7 +892,7 @@ fun SettingsScreen(
                         color = Color(0x33FFFFFF)
                     )
                     Text(
-                        text = "最新更新 (v0.9.0): Galaxy等の別端末バックアップ復元時に未インストールとなるアプリ（Galaxy版KindleやSamsung標準アプリ等）のパッケージ違い診断・Google Play正規ID変換・キーワード/Webしつこい検索・Pixel内アプリへの1タップ/一括置き換え機能を追加",
+                        text = "最新更新 (v1.0.0 - Chime Launcher): 正式名称「Chime Launcher」と新アプリアイコン(Adaptive Icon対応)を導入。ページインジケーターで節目を静かに知らせる「Chime Moments (First / Return / Time Chime)」、インジケーター表示切替 (Dots / Icons / Text)、およびアプリ検索のZero Query状態 (Recently Used / Frequently Used / Recently Installed) と利用頻度順ソートを実装",
                         color = Color(0xFF9AA0A6),
                         fontSize = 11.sp,
                         lineHeight = 16.sp

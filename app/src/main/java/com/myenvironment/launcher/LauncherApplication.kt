@@ -4,12 +4,14 @@ import android.app.Application
 import android.content.Context
 import com.myenvironment.launcher.core.backup.BackupManager
 import com.myenvironment.launcher.core.backup.JsonBackupManager
+import com.myenvironment.launcher.core.chime.ChimeController
 import com.myenvironment.launcher.core.feed.DefaultFeedBridge
 import com.myenvironment.launcher.core.feed.FeedBridge
 import com.myenvironment.launcher.core.launcher.AndroidAppLauncher
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
 import com.myenvironment.launcher.core.launcher.AppLauncher
 import com.myenvironment.launcher.core.launcher.LauncherAppsAppDiscoveryRepository
+import com.myenvironment.launcher.core.search.AppUsageRepository
 import com.myenvironment.launcher.core.search.DefaultSearchEngine
 import com.myenvironment.launcher.core.search.SearchEngine
 import com.myenvironment.launcher.core.storage.DataStoreSettingsRepository
@@ -20,7 +22,7 @@ import com.myenvironment.launcher.core.storage.db.LauncherDatabase
 import com.myenvironment.launcher.core.widget.WidgetHostManager
 
 /**
- * アプリ全体の依存オブジェクトを保持する軽量DIコンテナ (仕様 40, 41)
+ * Chime Launcher 全体の依存オブジェクトを保持する軽量DIコンテナ (仕様 40, 41)
  *
  * 各機能はInterface境界で公開され、将来的なHilt/Koin移行やMulti-Module分割を容易にする。
  */
@@ -53,6 +55,12 @@ class AppContainer(context: Context) {
 
     val searchEngine: SearchEngine =
         DefaultSearchEngine()
+
+    val appUsageRepository: AppUsageRepository =
+        AppUsageRepository(appContext)
+
+    val chimeController: ChimeController =
+        ChimeController()
 
     val backupManager: BackupManager =
         JsonBackupManager(

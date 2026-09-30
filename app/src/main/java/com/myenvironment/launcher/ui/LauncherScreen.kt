@@ -98,6 +98,7 @@ import com.myenvironment.launcher.ui.home.CrossPageDragState
 import com.myenvironment.launcher.ui.home.HomeGridPage
 import com.myenvironment.launcher.ui.home.HomePageGridMetrics
 import com.myenvironment.launcher.ui.home.MissingAppDialog
+import com.myenvironment.launcher.ui.indicator.PageIndicatorBar
 import com.myenvironment.launcher.ui.search.SearchOverlay
 import com.myenvironment.launcher.ui.settings.JsonBackupPreviewDialog
 import com.myenvironment.launcher.ui.settings.SettingsScreen
@@ -193,7 +194,7 @@ internal fun resolveExpandedDualSlotIndex(
 }
 
 /**
- * My Launcher ルート画面
+ * Chime Launcher ルート画面
  *
  * - ページ構成: [Discover] [All Apps] [HOME] [Page 2...] [設定 (一番右)]
  * - Fold閉 (Compact): 1ページ表示 + 下部 Bottom Dock
@@ -689,11 +690,16 @@ fun LauncherScreen(
                 PageIndicatorBar(
                     pages = pages,
                     visiblePageIndices = visiblePageIndices,
+                    indicatorStyle = uiState.settings.indicatorStyle,
                     isLayoutLocked = uiState.settings.layoutLocked,
+                    timeSegment = uiState.overlay.currentTimeSegment,
+                    timeChimeEnabled = uiState.settings.timeChimeEnabled,
+                    activeChimeEvent = uiState.overlay.activeChimeEvent,
                     onSelectPage = { idx ->
                         pages.getOrNull(idx)?.let { viewModel.jumpToPage(it.id) }
                     },
-                    onLongPressIndicator = { viewModel.openHomeEditSheet() }
+                    onLongPressIndicator = { viewModel.openHomeEditSheet() },
+                    onChimeAnimationFinished = { viewModel.onChimeAnimationFinished() }
                 )
 
                 AdaptiveDock(
@@ -858,7 +864,11 @@ fun LauncherScreen(
                     PageIndicatorBar(
                         pages = pages,
                         visiblePageIndices = visiblePageIndices,
+                        indicatorStyle = uiState.settings.indicatorStyle,
                         isLayoutLocked = uiState.settings.layoutLocked,
+                        timeSegment = uiState.overlay.currentTimeSegment,
+                        timeChimeEnabled = uiState.settings.timeChimeEnabled,
+                        activeChimeEvent = uiState.overlay.activeChimeEvent,
                         onSelectPage = { idx ->
                             val targetPage = pages.getOrNull(idx) ?: return@PageIndicatorBar
                             if (isDualPageMode) {
@@ -873,7 +883,8 @@ fun LauncherScreen(
                                 }
                             }
                         },
-                        onLongPressIndicator = { viewModel.openHomeEditSheet() }
+                        onLongPressIndicator = { viewModel.openHomeEditSheet() },
+                        onChimeAnimationFinished = { viewModel.onChimeAnimationFinished() }
                     )
                 }
 
@@ -1031,7 +1042,7 @@ fun LauncherScreen(
 
         // --- Overlays & Dialogs ---
 
-        // 1. Swipe Up Search Overlay (仕様 8, 9)
+        // 1. Swipe Up Search Overlay (仕様 8, 9, 21〜27, 37)
         AnimatedVisibility(
             visible = uiState.overlay.isSearchOverlayOpen,
             enter = fadeIn() + slideInVertically { it / 4 },
@@ -1040,12 +1051,15 @@ fun LauncherScreen(
             SearchOverlay(
                 installedApps = uiState.installedApps,
                 configuredShortcuts = uiState.layoutItems,
+                usageMap = uiState.usageMetrics,
+                hasUsageAccessPermission = uiState.hasUsageAccessPermission,
                 searchEngine = viewModel.searchEngine,
                 appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
                 onLaunchApp = { viewModel.launchApp(it) },
                 onLaunchShortcut = { viewModel.onLayoutItemClicked(it, true) },
                 onTriggerAction = { viewModel.triggerLauncherAction(it) },
                 onGoogleSearch = { viewModel.launchGoogleSearch(it) },
+                onRequestUsageAccess = { viewModel.openUsageAccessSettings() },
                 onDismiss = { viewModel.closeSearchOverlay() }
             )
         }
@@ -1061,6 +1075,7 @@ fun LauncherScreen(
                 snapshots = uiState.snapshots,
                 statusMessage = uiState.overlay.statusMessage,
                 isEmbeddedPage = false,
+                hasUsageAccessPermission = uiState.hasUsageAccessPermission,
                 onClearStatusMessage = { viewModel.clearStatusMessage() },
                 onToggleLayoutLock = { viewModel.setLayoutLocked(it) },
                 onUpdateCompactGrid = { c, r -> viewModel.updateCompactGrid(c, r) },
@@ -1070,8 +1085,14 @@ fun LauncherScreen(
                 },
                 onSelectExpandedLayoutMode = { viewModel.setExpandedPageLayoutMode(it) },
                 onToggleAllAppsLeftOnlyInExpanded = { viewModel.setAllAppsLeftOnlyInExpandedSingle(it) },
+                onSelectIndicatorStyle = { viewModel.setIndicatorStyle(it) },
+                onToggleFirstChime = { viewModel.setFirstChimeEnabled(it) },
+                onToggleReturnChime = { viewModel.setReturnChimeEnabled(it) },
+                onSelectReturnChimeInterval = { viewModel.setReturnChimeInterval(it) },
+                onToggleTimeChime = { viewModel.setTimeChimeEnabled(it) },
                 onToggleSwipeDownNotification = { viewModel.setSwipeDownNotificationEnabled(it) },
                 onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
+                onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
                 onOpenDefaultHomeSettings = { viewModel.openDefaultHomeSettings() },
                 onSelectDiscoverMode = { viewModel.setDiscoverMode(it) },
                 onSaveSnapshot = { viewModel.saveSnapshot(it) },
@@ -1223,7 +1244,7 @@ fun LauncherScreen(
                 text = {
                     Text(
                         "ホーム画面の中央から下スワイプでAndroid標準の通知シェードを開くには、" +
-                            "アクセシビリティ設定で「My Launcher 通知シェード操作」を有効にしてください。\n\n" +
+                            "アクセシビリティ設定で「Chime Launcher 通知シェード操作」を有効にしてください。\n\n" +
                             "※画面内容の読み取りは一切行わず、通知パネル展開のみに使用します。"
                     )
                 },
@@ -1356,12 +1377,13 @@ private fun LauncherPageContent(
         }
 
         LauncherPage.PAGE_ID_SETTINGS -> {
-            // 一番右端のマイランチャー設定ページ
+            // 一番右端のChime Launcher設定ページ
             SettingsScreen(
                 settings = uiState.settings,
                 snapshots = uiState.snapshots,
                 statusMessage = uiState.overlay.statusMessage,
                 isEmbeddedPage = true,
+                hasUsageAccessPermission = uiState.hasUsageAccessPermission,
                 onClearStatusMessage = { viewModel.clearStatusMessage() },
                 onToggleLayoutLock = { viewModel.setLayoutLocked(it) },
                 onUpdateCompactGrid = { c, r -> viewModel.updateCompactGrid(c, r) },
@@ -1371,8 +1393,14 @@ private fun LauncherPageContent(
                 },
                 onSelectExpandedLayoutMode = { viewModel.setExpandedPageLayoutMode(it) },
                 onToggleAllAppsLeftOnlyInExpanded = { viewModel.setAllAppsLeftOnlyInExpandedSingle(it) },
+                onSelectIndicatorStyle = { viewModel.setIndicatorStyle(it) },
+                onToggleFirstChime = { viewModel.setFirstChimeEnabled(it) },
+                onToggleReturnChime = { viewModel.setReturnChimeEnabled(it) },
+                onSelectReturnChimeInterval = { viewModel.setReturnChimeInterval(it) },
+                onToggleTimeChime = { viewModel.setTimeChimeEnabled(it) },
                 onToggleSwipeDownNotification = { viewModel.setSwipeDownNotificationEnabled(it) },
                 onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
+                onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
                 onOpenDefaultHomeSettings = { viewModel.openDefaultHomeSettings() },
                 onSelectDiscoverMode = { viewModel.setDiscoverMode(it) },
                 onSaveSnapshot = { viewModel.saveSnapshot(it) },
@@ -1499,67 +1527,6 @@ private fun EditModeBanner(
                         Text("完了", fontSize = 12.sp)
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PageIndicatorBar(
-    pages: List<LauncherPage>,
-    visiblePageIndices: Set<Int>,
-    isLayoutLocked: Boolean,
-    onSelectPage: (Int) -> Unit,
-    onLongPressIndicator: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0x55101218))
-                .clickable { onLongPressIndicator() }
-                .padding(horizontal = 12.dp, vertical = 5.dp)
-        ) {
-            pages.forEachIndexed { index, page ->
-                val isSelected = visiblePageIndices.contains(index)
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.primary
-                            else Color.White.copy(alpha = 0.3f)
-                        )
-                        .clickable { onSelectPage(index) }
-                        .padding(horizontal = if (isSelected) 8.dp else 4.dp, vertical = 3.dp)
-                ) {
-                    if (isSelected) {
-                        Text(
-                            text = page.name,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.size(4.dp))
-                    }
-                }
-            }
-
-            if (isLayoutLocked) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = "レイアウトロック中",
-                    tint = Color.White.copy(alpha = 0.65f),
-                    modifier = Modifier.size(12.dp)
-                )
             }
         }
     }

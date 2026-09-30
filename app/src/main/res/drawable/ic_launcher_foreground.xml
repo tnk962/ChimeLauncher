@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Safe Zone (24..84) 内に 3枚のパネル・軌道・発光ドットを配置 -->
+
+    <!-- 1. 背面側の軌道アーク（3枚のパネルの後ろを通る楕円軌道） -->
+    <group
+        android:pivotX="54"
+        android:pivotY="53"
+        android:rotation="-14">
+        <path
+            android:pathData="M24,53 A30,11.5 0 0,1 84,53"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="24"
+                    android:startY="53"
+                    android:endX="84"
+                    android:endY="53"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#804DD0E1" />
+                    <item android:offset="0.5" android:color="#5526C6DA" />
+                    <item android:offset="1.0" android:color="#99FFD54F" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+
+    <!-- 2. 左パネル（Discover 抽象化：少し低い角丸長方形、青〜シアン〜ミント系） -->
+    <path android:pathData="M36.2,37.5 L42.8,37.5 A2.8,2.8 0 0,1 45.6,40.3 L45.6,65.2 A2.8,2.8 0 0,1 42.8,68.0 L36.2,68.0 A2.8,2.8 0 0,1 33.4,65.2 L33.4,40.3 A2.8,2.8 0 0,1 36.2,37.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="39.5"
+                android:startY="37.5"
+                android:endX="39.5"
+                android:endY="68.0"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF84FFFF" />
+                <item android:offset="0.45" android:color="#FF26C6DA" />
+                <item android:offset="1.0" android:color="#FF0277BD" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 左パネルのハイライト枠 -->
+    <path
+        android:pathData="M36.2,37.5 L42.8,37.5 A2.8,2.8 0 0,1 45.6,40.3 L45.6,65.2 A2.8,2.8 0 0,1 42.8,68.0 L36.2,68.0 A2.8,2.8 0 0,1 33.4,65.2 L33.4,40.3 A2.8,2.8 0 0,1 36.2,37.5 Z"
+        android:strokeWidth="0.7"
+        android:strokeColor="#99E0F7FA" />
+
+    <!-- 3. 右パネル（Home / Pages 抽象化：少し低い角丸長方形、青〜シアン〜ミント系） -->
+    <path android:pathData="M65.2,35.5 L71.8,35.5 A2.8,2.8 0 0,1 74.6,38.3 L74.6,65.2 A2.8,2.8 0 0,1 71.8,68.0 L65.2,68.0 A2.8,2.8 0 0,1 62.4,65.2 L62.4,38.3 A2.8,2.8 0 0,1 65.2,35.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="68.5"
+                android:startY="35.5"
+                android:endX="68.5"
+                android:endY="68.0"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFA7FFEB" />
+                <item android:offset="0.45" android:color="#FF00BCD4" />
+                <item android:offset="1.0" android:color="#FF01579B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 右パネルのハイライト枠 -->
+    <path
+        android:pathData="M65.2,35.5 L71.8,35.5 A2.8,2.8 0 0,1 74.6,38.3 L74.6,65.2 A2.8,2.8 0 0,1 71.8,68.0 L65.2,68.0 A2.8,2.8 0 0,1 62.4,65.2 L62.4,38.3 A2.8,2.8 0 0,1 65.2,35.5 Z"
+        android:strokeWidth="0.7"
+        android:strokeColor="#99E0F7FA" />
+
+    <!-- 4. 中央パネル（最も高いメインパネル、ミント〜シアン〜ブルー系） -->
+    <path android:pathData="M50.5,28.0 L57.5,28.0 A3.1,3.1 0 0,1 60.6,31.1 L60.6,65.2 A3.1,3.1 0 0,1 57.5,68.3 L50.5,68.3 A3.1,3.1 0 0,1 47.4,65.2 L47.4,31.1 A3.1,3.1 0 0,1 50.5,28.0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="28.0"
+                android:endX="54"
+                android:endY="68.3"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFB2FEF7" />
+                <item android:offset="0.35" android:color="#FF4DD0E1" />
+                <item android:offset="0.75" android:color="#FF00ACC1" />
+                <item android:offset="1.0" android:color="#FF0288D1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 中央パネルのハイライト枠 -->
+    <path
+        android:pathData="M50.5,28.0 L57.5,28.0 A3.1,3.1 0 0,1 60.6,31.1 L60.6,65.2 A3.1,3.1 0 0,1 57.5,68.3 L50.5,68.3 A3.1,3.1 0 0,1 47.4,65.2 L47.4,31.1 A3.1,3.1 0 0,1 50.5,28.0 Z"
+        android:strokeWidth="0.9"
+        android:strokeColor="#CCFFFFFF" />
+
+    <!-- 5. 前面側の軌道アーク（3枚のパネルの手前を横切る発光軌道） -->
+    <group
+        android:pivotX="54"
+        android:pivotY="53"
+        android:rotation="-14">
+        <!-- 外側のソフトグロー -->
+        <path
+            android:pathData="M84,53 A30,11.5 0 0,1 24,53"
+            android:strokeWidth="3.8"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="24"
+                    android:startY="58"
+                    android:endX="84"
+                    android:endY="58"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#55FFB300" />
+                    <item android:offset="0.5" android:color="#664DD0E1" />
+                    <item android:offset="1.0" android:color="#66FFD54F" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <!-- シャープな軌道コアライン -->
+        <path
+            android:pathData="M84,53 A30,11.5 0 0,1 24,53"
+            android:strokeWidth="1.8"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="24"
+                    android:startY="58"
+                    android:endX="84"
+                    android:endY="58"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FFFFE082" />
+                    <item android:offset="0.45" android:color="#FFB2EBF2" />
+                    <item android:offset="0.80" android:color="#FFFFD54F" />
+                    <item android:offset="1.0" android:color="#FFFFECB3" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+
+    <!-- 6. 軌道上の暖色系発光ドット（3箇所：左・中央下・右） -->
+    <!-- ドット1（左端軌道上: x=26.5, y=58.8） -->
+    <path
+        android:fillColor="#66FFA000"
+        android:pathData="M26.5,58.8m-4.2,0a4.2,4.2 0,1 0,8.4 0a4.2,4.2 0,1 0,-8.4 0" />
+    <path
+        android:fillColor="#FFFFCA28"
+        android:pathData="M26.5,58.8m-2.4,0a2.4,2.4 0,1 0,4.8 0a2.4,2.4 0,1 0,-4.8 0" />
+    <path
+        android:fillColor="#FFFFFDE7"
+        android:pathData="M26.5,58.8m-1.2,0a1.2,1.2 0,1 0,2.4 0a1.2,1.2 0,1 0,-2.4 0" />
+
+    <!-- ドット2（前面軌道中央やや右: x=61.5, y=61.8） -->
+    <path
+        android:fillColor="#77FF8F00"
+        android:pathData="M61.5,61.8m-4.8,0a4.8,4.8 0,1 0,9.6 0a4.8,4.8 0,1 0,-9.6 0" />
+    <path
+        android:fillColor="#FFFFD54F"
+        android:pathData="M61.5,61.8m-2.8,0a2.8,2.8 0,1 0,5.6 0a2.8,2.8 0,1 0,-5.6 0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M61.5,61.8m-1.4,0a1.4,1.4 0,1 0,2.8 0a1.4,1.4 0,1 0,-2.8 0" />
+
+    <!-- ドット3（右上軌道上: x=81.8, y=46.2） -->
+    <path
+        android:fillColor="#66FFA000"
+        android:pathData="M81.8,46.2m-3.8,0a3.8,3.8 0,1 0,7.6 0a3.8,3.8 0,1 0,-7.6 0" />
+    <path
+        android:fillColor="#FFFFCA28"
+        android:pathData="M81.8,46.2m-2.1,0a2.1,2.1 0,1 0,4.2 0a2.1,2.1 0,1 0,-4.2 0" />
+    <path
+        android:fillColor="#FFFFFDE7"
+        android:pathData="M81.8,46.2m-1.0,0a1.0,1.0 0,1 0,2.0 0a1.0,1.0 0,1 0,-2.0 0" />
+</vector>

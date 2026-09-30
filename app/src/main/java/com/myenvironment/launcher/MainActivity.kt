@@ -11,11 +11,12 @@ import com.myenvironment.launcher.ui.LauncherViewModel
 import com.myenvironment.launcher.ui.theme.MyLauncherTheme
 
 /**
- * My Launcher メインActivity (仕様 1.1, 4)
+ * Chime Launcher メインActivity (仕様 1.1, 4, 6〜10, 30)
  *
  * - CATEGORY_HOME / CATEGORY_DEFAULT に対応
  * - singleTask で常駐し、Homeジェスチャー (onNewIntent) 発生時は
  *   Activityを再生成せず既存PagerをHOMEページ位置へ戻す。
+ * - フォアグラウンド復帰・離脱時に Chime Moments (First / Return / Time Chime) を評価する。
  */
 class MainActivity : ComponentActivity() {
 
@@ -38,11 +39,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         viewModel.widgetHostManager.startListening()
+        viewModel.onLauncherResumed()
     }
 
     override fun onStop() {
         super.onStop()
         viewModel.widgetHostManager.stopListening()
+        viewModel.onLauncherPaused()
     }
 
     @Deprecated("Deprecated in Java")

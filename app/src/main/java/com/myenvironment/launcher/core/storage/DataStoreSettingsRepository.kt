@@ -6,11 +6,14 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
+import com.myenvironment.launcher.core.model.IndicatorStyle
 import com.myenvironment.launcher.core.model.LauncherSettings
+import com.myenvironment.launcher.core.model.ReturnChimeInterval
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -19,7 +22,7 @@ private val Context.launcherDataStore: DataStore<Preferences> by preferencesData
 )
 
 /**
- * Preferences DataStore を用いた SettingsRepository の実装 (仕様 21)
+ * Preferences DataStore を用いた SettingsRepository の実装 (仕様 21, 28)
  */
 class DataStoreSettingsRepository(
     private val appContext: Context
@@ -40,6 +43,16 @@ class DataStoreSettingsRepository(
         val DISCOVER_MODE = stringPreferencesKey("discover_mode_v2")
         val EXPANDED_LAYOUT_MODE = stringPreferencesKey("expanded_page_layout_mode")
         val ALL_APPS_LEFT_ONLY_EXPANDED = booleanPreferencesKey("all_apps_left_only_expanded")
+
+        // Chime Launcher 設定 & 状態管理 (仕様 11, 13, 28, 32)
+        val INDICATOR_STYLE = stringPreferencesKey("indicator_style")
+        val FIRST_CHIME_ENABLED = booleanPreferencesKey("first_chime_enabled")
+        val RETURN_CHIME_ENABLED = booleanPreferencesKey("return_chime_enabled")
+        val RETURN_CHIME_INTERVAL = stringPreferencesKey("return_chime_interval")
+        val TIME_CHIME_ENABLED = booleanPreferencesKey("time_chime_enabled")
+        val CHIME_SOUND_ENABLED = booleanPreferencesKey("chime_sound_enabled")
+        val LAST_FIRST_CHIME_DATE = stringPreferencesKey("last_first_chime_date")
+        val LAST_LAUNCHER_VISIBLE_TIMESTAMP = longPreferencesKey("last_launcher_visible_timestamp")
     }
 
     override val settings: Flow<LauncherSettings> = appContext.launcherDataStore.data.map { prefs ->
@@ -53,6 +66,14 @@ class DataStoreSettingsRepository(
         val expandedLayoutMode = expandedModeStr?.let {
             runCatching { ExpandedPageLayoutMode.valueOf(it) }.getOrNull()
         } ?: default.expandedPageLayoutMode
+
+        val indicatorStyle = prefs[Keys.INDICATOR_STYLE]?.let {
+            runCatching { IndicatorStyle.valueOf(it) }.getOrNull()
+        } ?: default.indicatorStyle
+
+        val returnInterval = prefs[Keys.RETURN_CHIME_INTERVAL]?.let {
+            runCatching { ReturnChimeInterval.valueOf(it) }.getOrNull()
+        } ?: default.returnChimeInterval
 
         LauncherSettings(
             layoutLocked = prefs[Keys.LAYOUT_LOCKED] ?: default.layoutLocked,
@@ -68,8 +89,22 @@ class DataStoreSettingsRepository(
             discoverMode = discoverMode,
             expandedPageLayoutMode = expandedLayoutMode,
             allAppsLeftOnlyInExpandedSingle = prefs[Keys.ALL_APPS_LEFT_ONLY_EXPANDED]
-                ?: default.allAppsLeftOnlyInExpandedSingle
+                ?: default.allAppsLeftOnlyInExpandedSingle,
+            indicatorStyle = indicatorStyle,
+            firstChimeEnabled = prefs[Keys.FIRST_CHIME_ENABLED] ?: default.firstChimeEnabled,
+            returnChimeEnabled = prefs[Keys.RETURN_CHIME_ENABLED] ?: default.returnChimeEnabled,
+            returnChimeInterval = returnInterval,
+            timeChimeEnabled = prefs[Keys.TIME_CHIME_ENABLED] ?: default.timeChimeEnabled,
+            chimeSoundEnabled = prefs[Keys.CHIME_SOUND_ENABLED] ?: default.chimeSoundEnabled
         )
+    }
+
+    override val lastFirstChimeDate: Flow<String> = appContext.launcherDataStore.data.map { prefs ->
+        prefs[Keys.LAST_FIRST_CHIME_DATE] ?: ""
+    }
+
+    override val lastLauncherVisibleTimestamp: Flow<Long> = appContext.launcherDataStore.data.map { prefs ->
+        prefs[Keys.LAST_LAUNCHER_VISIBLE_TIMESTAMP] ?: 0L
     }
 
     val isDefaultLayoutSeeded: Flow<Boolean> = appContext.launcherDataStore.data.map { prefs ->
@@ -140,6 +175,54 @@ class DataStoreSettingsRepository(
         }
     }
 
+    override suspend fun setIndicatorStyle(style: IndicatorStyle) {
+        appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.INDICATOR_STYLE] = style.name
+        }
+    }
+
+    override suspend fun setFirstChimeEnabled(enabled: Boolean) {
+        appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.FIRST_CHIME_ENABLED] = enabled
+        }
+    }
+
+    override suspend fun setReturnChimeEnabled(enabled: Boolean) {
+        appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.RETURN_CHIME_ENABLED] = enabled
+        }
+    }
+
+    override suspend fun setReturnChimeInterval(interval: ReturnChimeInterval) {
+        appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.RETURN_CHIME_INTERVAL] = interval.name
+        }
+    }
+
+    override suspend fun setTimeChimeEnabled(enabled: Boolean) {
+        appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.TIME_CHIME_ENABLED] = enabled
+        }
+    }
+
+    override suspend fun setChimeSoundEnabled(enabled: Boolean) {
+        appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.CHIME_SOUND_ENABLED] = enabled
+        }
+    }
+
+    override suspend fun setLastFirstChimeDate(date: String) {
+        appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.LAST_FIRST_CHIME_DATE] = date
+        }
+    }
+
+    override suspend fun setLastLauncherVisibleTimestamp(timestampMillis: Long) {
+        appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.LAST_LAUNCHER_VISIBLE_TIMESTAMP] = timestampMillis
+        }
+    }
+
     override suspend fun replaceSettings(newSettings: LauncherSettings) {
         appContext.launcherDataStore.edit { prefs ->
             prefs[Keys.LAYOUT_LOCKED] = newSettings.layoutLocked
@@ -155,6 +238,12 @@ class DataStoreSettingsRepository(
             prefs[Keys.DISCOVER_MODE] = newSettings.discoverMode.name
             prefs[Keys.EXPANDED_LAYOUT_MODE] = newSettings.expandedPageLayoutMode.name
             prefs[Keys.ALL_APPS_LEFT_ONLY_EXPANDED] = newSettings.allAppsLeftOnlyInExpandedSingle
+            prefs[Keys.INDICATOR_STYLE] = newSettings.indicatorStyle.name
+            prefs[Keys.FIRST_CHIME_ENABLED] = newSettings.firstChimeEnabled
+            prefs[Keys.RETURN_CHIME_ENABLED] = newSettings.returnChimeEnabled
+            prefs[Keys.RETURN_CHIME_INTERVAL] = newSettings.returnChimeInterval.name
+            prefs[Keys.TIME_CHIME_ENABLED] = newSettings.timeChimeEnabled
+            prefs[Keys.CHIME_SOUND_ENABLED] = newSettings.chimeSoundEnabled
         }
     }
 }

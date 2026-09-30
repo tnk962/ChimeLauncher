@@ -44,9 +44,14 @@ interface AppLauncher {
     fun searchPlayStoreOnWeb(query: String)
 
     /**
-     * システムのAccessibility設定画面を開く (仕様 7.2)
+     * システムのアクセシビリティ設定画面を開く (仕様 7.2)
      */
     fun openAccessibilitySettings()
+
+    /**
+     * システムの使用状況へのアクセス (Usage Access) 設定画面を開く (仕様 24, 37)
+     */
+    fun openUsageAccessSettings() {}
 
     /**
      * システムのデフォルトホームアプリ選択画面を開く (仕様 4, 45)

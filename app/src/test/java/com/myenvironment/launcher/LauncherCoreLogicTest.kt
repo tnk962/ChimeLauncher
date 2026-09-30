@@ -638,4 +638,226 @@ class LauncherCoreLogicTest {
             resolution.installedCandidates.first().appInfo.packageName
         )
     }
+
+    @Test
+    fun `FirstChimeDetector triggers once per calendar day and resets on next day`() {
+        // 1. 同日初回は First Chime が発生すること
+        assertTrue(
+            com.myenvironment.launcher.core.chime.FirstChimeDetector.shouldTrigger(
+                currentDate = "2026-09-30",
+                lastFirstChimeDate = "",
+                enabled = true
+            )
+        )
+
+        // 2. 同日2回目では発生しないこと
+        org.junit.Assert.assertFalse(
+            com.myenvironment.launcher.core.chime.FirstChimeDetector.shouldTrigger(
+                currentDate = "2026-09-30",
+                lastFirstChimeDate = "2026-09-30",
+                enabled = true
+            )
+        )
+
+        // 3. 翌日になれば再び発生すること
+        assertTrue(
+            com.myenvironment.launcher.core.chime.FirstChimeDetector.shouldTrigger(
+                currentDate = "2026-10-01",
+                lastFirstChimeDate = "2026-09-30",
+                enabled = true
+            )
+        )
+    }
+
+    @Test
+    fun `ReturnChimeDetector triggers only when away duration meets or exceeds configured threshold`() {
+        val baseTime = 1_700_000_000_000L
+        val threshold1Hour = com.myenvironment.launcher.core.model.ReturnChimeInterval.HOURS_1.durationMillis
+
+        // 1. 閾値未満（15分離脱）では発生しないこと
+        org.junit.Assert.assertFalse(
+            com.myenvironment.launcher.core.chime.ReturnChimeDetector.shouldTrigger(
+                nowMillis = baseTime + 15 * 60_000L,
+                lastLauncherVisibleTimestamp = baseTime,
+                thresholdMillis = threshold1Hour,
+                enabled = true
+            )
+        )
+
+        // 2. 閾値以上（65分離脱）で発生すること
+        assertTrue(
+            com.myenvironment.launcher.core.chime.ReturnChimeDetector.shouldTrigger(
+                nowMillis = baseTime + 65 * 60_000L,
+                lastLauncherVisibleTimestamp = baseTime,
+                thresholdMillis = threshold1Hour,
+                enabled = true
+            )
+        )
+    }
+
+    @Test
+    fun `ChimeController enforces priority First Chime over Return Chime when both qualify`() {
+        val zone = java.time.ZoneId.of("Asia/Tokyo")
+        val controller = com.myenvironment.launcher.core.chime.ChimeController(zoneIdProvider = { zone })
+        val prevNight = java.time.ZonedDateTime.of(2026, 9, 29, 23, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val nextMorning = java.time.ZonedDateTime.of(2026, 9, 30, 7, 30, 0, 0, zone).toInstant().toEpochMilli()
+
+        val settings = LauncherSettings(
+            firstChimeEnabled = true,
+            returnChimeEnabled = true,
+            returnChimeInterval = com.myenvironment.launcher.core.model.ReturnChimeInterval.HOURS_1,
+            timeChimeEnabled = true
+        )
+
+        // 8時間半ぶりの復帰かつ翌日初回 -> First Chime と Return Chime の両条件を満たすが First Chime のみ発生する
+        val result = controller.evaluateOnHomeVisible(
+            nowMillis = nextMorning,
+            lastFirstChimeDate = "2026-09-29",
+            lastLauncherVisibleTimestamp = prevNight,
+            settings = settings
+        )
+
+        assertEquals(com.myenvironment.launcher.core.chime.ChimeEvent.First, result.event)
+        assertEquals("2026-09-30", result.updatedLastFirstChimeDate)
+        assertEquals(com.myenvironment.launcher.core.chime.TimeSegment.MORNING, result.timeSegment)
+    }
+
+    @Test
+    fun `TimeChimeProvider resolves all 5 time segments and falls back to DAY when disabled`() {
+        assertEquals(
+            com.myenvironment.launcher.core.chime.TimeSegment.MORNING,
+            com.myenvironment.launcher.core.chime.TimeChimeProvider.resolveTimeSegment(7, enabled = true)
+        )
+        assertEquals(
+            com.myenvironment.launcher.core.chime.TimeSegment.DAY,
+            com.myenvironment.launcher.core.chime.TimeChimeProvider.resolveTimeSegment(13, enabled = true)
+        )
+        assertEquals(
+            com.myenvironment.launcher.core.chime.TimeSegment.EVENING,
+            com.myenvironment.launcher.core.chime.TimeChimeProvider.resolveTimeSegment(18, enabled = true)
+        )
+        assertEquals(
+            com.myenvironment.launcher.core.chime.TimeSegment.NIGHT,
+            com.myenvironment.launcher.core.chime.TimeChimeProvider.resolveTimeSegment(22, enabled = true)
+        )
+        assertEquals(
+            com.myenvironment.launcher.core.chime.TimeSegment.LATE_NIGHT,
+            com.myenvironment.launcher.core.chime.TimeChimeProvider.resolveTimeSegment(2, enabled = true)
+        )
+
+        // Time Chime 設定 OFF 時は深夜時間帯でも DAY（ニュートラル表示）にフォールバックすること
+        assertEquals(
+            com.myenvironment.launcher.core.chime.TimeSegment.DAY,
+            com.myenvironment.launcher.core.chime.TimeChimeProvider.resolveTimeSegment(2, enabled = false)
+        )
+    }
+
+    @Test
+    fun `PageIndicatorBar resolveShortPageLabel formats Discover Apps Home numbers and Settings`() {
+        val page2 = LauncherPage(id = "page_2", name = "Page 2", sortOrder = 1)
+        val pageWork = LauncherPage(id = "page_work", name = "仕事用", sortOrder = 2)
+
+        assertEquals(
+            "Discover",
+            com.myenvironment.launcher.ui.indicator.resolveShortPageLabel(LauncherPage.FIXED_DISCOVER, 0)
+        )
+        assertEquals(
+            "Apps",
+            com.myenvironment.launcher.ui.indicator.resolveShortPageLabel(LauncherPage.FIXED_ALL_APPS, 0)
+        )
+        assertEquals(
+            "1",
+            com.myenvironment.launcher.ui.indicator.resolveShortPageLabel(LauncherPage.FIXED_HOME, 1)
+        )
+        assertEquals(
+            "2",
+            com.myenvironment.launcher.ui.indicator.resolveShortPageLabel(page2, 2)
+        )
+        assertEquals(
+            "仕事用",
+            com.myenvironment.launcher.ui.indicator.resolveShortPageLabel(pageWork, 3)
+        )
+        assertEquals(
+            "Settings",
+            com.myenvironment.launcher.ui.indicator.resolveShortPageLabel(LauncherPage.FIXED_SETTINGS, 0)
+        )
+    }
+
+    @Test
+    fun `AppUsageAnalyzer computes Zero Query sections and DefaultSearchEngine ranks with usage bonus`() {
+        val now = 1_700_000_000_000L
+        val oneDayMs = 24 * 60 * 60 * 1000L
+
+        val appYoutube = AppInfo("com.google.android.youtube", "Main", "YouTube", firstInstallTime = now - 90 * oneDayMs)
+        val appKeep = AppInfo("com.google.android.keep", "Main", "Keep メモ", firstInstallTime = now - 60 * oneDayMs)
+        val appChrome = AppInfo("com.android.chrome", "Main", "Chrome", firstInstallTime = now - 120 * oneDayMs)
+        val appNewGame = AppInfo("com.example.newgame", "Main", "New Game", firstInstallTime = now - 2 * oneDayMs)
+        val installedApps = listOf(appYoutube, appKeep, appChrome, appNewGame)
+
+        val usageMap = mapOf(
+            appYoutube.packageName to com.myenvironment.launcher.core.search.AppUsageMetric(
+                packageName = appYoutube.packageName,
+                lastTimeUsedMillis = now - 5 * 60_000L,
+                recent7dLaunchScore = 40.0,
+                recent30dLaunchScore = 80.0
+            ),
+            appKeep.packageName to com.myenvironment.launcher.core.search.AppUsageMetric(
+                packageName = appKeep.packageName,
+                lastTimeUsedMillis = now - 30 * 60_000L,
+                recent7dLaunchScore = 15.0,
+                recent30dLaunchScore = 30.0
+            ),
+            appChrome.packageName to com.myenvironment.launcher.core.search.AppUsageMetric(
+                packageName = appChrome.packageName,
+                lastTimeUsedMillis = now - 2 * 60_000L,
+                recent7dLaunchScore = 8.0,
+                recent30dLaunchScore = 15.0
+            )
+        )
+
+        // 1. Zero Query State の3セクション（Recently Used / Frequently Used / Recently Installed）算出検証
+        val sections = com.myenvironment.launcher.core.search.AppUsageAnalyzer.computeZeroQuerySections(
+            installedApps = installedApps,
+            usageMap = usageMap,
+            nowMillis = now
+        )
+
+        // Recently Used: 最終使用時刻の降順 (Chrome -> YouTube -> Keep)
+        assertEquals(
+            listOf("com.android.chrome", "com.google.android.youtube", "com.google.android.keep"),
+            sections.recentlyUsed.map { it.packageName }
+        )
+        // Frequently Used: 頻度スコアの降順 (YouTube -> Keep -> Chrome)
+        assertEquals(
+            listOf("com.google.android.youtube", "com.google.android.keep", "com.android.chrome"),
+            sections.frequentlyUsed.map { it.packageName }
+        )
+        // Recently Installed: 30日以内にインストールされた New Game が含まれること
+        assertEquals(
+            listOf("com.example.newgame"),
+            sections.recentlyInstalled.map { it.packageName }
+        )
+
+        // 2. 検索時の利用頻度ボーナスによるタイブレーク検証
+        val appNoteRare = AppInfo("com.example.note.rare", "Main", "Note Pad")
+        val appNoteFrequent = AppInfo("com.example.note.freq", "Main", "Note Pro")
+        val engine = com.myenvironment.launcher.core.search.DefaultSearchEngine()
+        val result = engine.search(
+            query = "Note",
+            installedApps = listOf(appNoteRare, appNoteFrequent),
+            configuredShortcuts = emptyList(),
+            usageMap = mapOf(
+                appNoteFrequent.packageName to com.myenvironment.launcher.core.search.AppUsageMetric(
+                    packageName = appNoteFrequent.packageName,
+                    lastTimeUsedMillis = now - 60_000L,
+                    recent7dLaunchScore = 30.0,
+                    recent30dLaunchScore = 60.0
+                )
+            )
+        )
+
+        // 両方とも "Note" の前方一致だが、よく使う Note Pro が先頭に来ること
+        assertEquals(2, result.matchingApps.size)
+        assertEquals("com.example.note.freq", result.matchingApps.first().packageName)
+    }
 }

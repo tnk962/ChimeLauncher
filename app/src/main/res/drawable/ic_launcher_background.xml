@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 1. 濃いブルー系背景（夜明け前の深い空〜地平線へ向かうグラデーション） -->
+    <path android:pathData="M0,0h108v73h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="0"
+                android:endX="54"
+                android:endY="73"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF040B1C" />
+                <item android:offset="0.45" android:color="#FF0A1D42" />
+                <item android:offset="0.80" android:color="#FF12346B" />
+                <item android:offset="1.0" android:color="#FF1E4C8A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 2. 地平線下の深いブルー（静かな水面・大地） -->
+    <path android:pathData="M0,73h108v35h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="73"
+                android:endX="54"
+                android:endY="108"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF0E2B56" />
+                <item android:offset="0.40" android:color="#FF081A38" />
+                <item android:offset="1.0" android:color="#FF040C1D" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 3. 地平線中央の暖色系の光（朝焼けのアンバー〜ゴールドの放射光） -->
+    <path android:pathData="M54,73m-42,0a42,26 0,1 0,84 0a42,26 0,1 0,-84 0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="73"
+                android:gradientRadius="40"
+                android:type="radial">
+                <item android:offset="0.0" android:color="#D9FFD54F" />
+                <item android:offset="0.28" android:color="#99FF9800" />
+                <item android:offset="0.62" android:color="#40FF6D00" />
+                <item android:offset="1.0" android:color="#0012346B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4. 水平な地平線 / 水平線（波打たないフラットな発光ライン） -->
+    <path android:pathData="M0,72.2h108v1.6h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="10"
+                android:startY="73"
+                android:endX="98"
+                android:endY="73"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#1A4FC3F7" />
+                <item android:offset="0.25" android:color="#9980DEEA" />
+                <item android:offset="0.50" android:color="#FFFFF59D" />
+                <item android:offset="0.75" android:color="#9980DEEA" />
+                <item android:offset="1.0" android:color="#1A4FC3F7" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 地平線中央のコアハイライト -->
+    <path android:pathData="M34,72.5h40v1.0h-40z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="34"
+                android:startY="73"
+                android:endX="74"
+                android:endY="73"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#00FFE082" />
+                <item android:offset="0.5" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#00FFE082" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

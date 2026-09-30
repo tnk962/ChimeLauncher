@@ -37,7 +37,69 @@ enum class ExpandedPageLayoutMode(val displayName: String, val description: Stri
 }
 
 /**
- * Launcher全体の設定モデル (仕様 10.2, 15, 21, 22, 29)
+ * ページインジケーターの表示スタイル (Chime Launcher 仕様 12〜16, 32)
+ */
+@Serializable
+enum class IndicatorStyle(
+    val displayName: String,
+    val englishLabel: String,
+    val description: String
+) {
+    DOTS(
+        displayName = "ドット (推奨)",
+        englishLabel = "Dots",
+        description = "最もミニマルなドット表示。Chime Momentsが最も美しく響きます"
+    ),
+    ICONS(
+        displayName = "アイコン",
+        englishLabel = "Icons",
+        description = "Discover・Apps・Home・Settingsを小さなアイコンで表現します"
+    ),
+    TEXT(
+        displayName = "テキスト",
+        englishLabel = "Text",
+        description = "Discover・Apps・1・2・Settingsなどの短いテキストで表示します"
+    )
+}
+
+/**
+ * Return Chime の判定間隔 (Chime Launcher 仕様 9.2, 11, 32, 33)
+ */
+@Serializable
+enum class ReturnChimeInterval(
+    val minutes: Int,
+    val durationMillis: Long,
+    val displayName: String,
+    val englishLabel: String
+) {
+    MINUTES_30(
+        minutes = 30,
+        durationMillis = 30L * 60_000L,
+        displayName = "30分",
+        englishLabel = "30 minutes"
+    ),
+    HOURS_1(
+        minutes = 60,
+        durationMillis = 60L * 60_000L,
+        displayName = "1時間",
+        englishLabel = "1 hour"
+    ),
+    HOURS_3(
+        minutes = 180,
+        durationMillis = 180L * 60_000L,
+        displayName = "3時間",
+        englishLabel = "3 hours"
+    ),
+    HOURS_6(
+        minutes = 360,
+        durationMillis = 360L * 60_000L,
+        displayName = "6時間",
+        englishLabel = "6 hours"
+    )
+}
+
+/**
+ * Chime Launcher 全体の設定モデル (仕様 10.2, 15, 21, 22, 29, Chime Moments 11〜16, 28, 32)
  */
 @Serializable
 data class LauncherSettings(
@@ -53,5 +115,11 @@ data class LauncherSettings(
     val swipeDownNotificationEnabled: Boolean = true,
     val discoverMode: DiscoverMode = DiscoverMode.NATIVE_BRIDGE,
     val expandedPageLayoutMode: ExpandedPageLayoutMode = ExpandedPageLayoutMode.DUAL_PAGE,
-    val allAppsLeftOnlyInExpandedSingle: Boolean = false
+    val allAppsLeftOnlyInExpandedSingle: Boolean = false,
+    val indicatorStyle: IndicatorStyle = IndicatorStyle.DOTS,
+    val firstChimeEnabled: Boolean = true,
+    val returnChimeEnabled: Boolean = true,
+    val returnChimeInterval: ReturnChimeInterval = ReturnChimeInterval.HOURS_1,
+    val timeChimeEnabled: Boolean = true,
+    val chimeSoundEnabled: Boolean = false
 )
