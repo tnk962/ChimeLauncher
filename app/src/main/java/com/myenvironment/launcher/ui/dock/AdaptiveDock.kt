@@ -179,7 +179,7 @@ private fun DockItemSlot(
     val isInstalled = when (item.type) {
         ItemType.APP -> installedPackages.contains(item.packageName) ||
             appDiscoveryRepository.isPackageInstalled(item.packageName)
-        ItemType.SHORTCUT, ItemType.ACTION -> true
+        ItemType.SHORTCUT, ItemType.ACTION, ItemType.WIDGET -> true
     }
 
     var menuExpanded by remember { mutableStateOf(false) }

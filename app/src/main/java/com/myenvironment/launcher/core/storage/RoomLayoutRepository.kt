@@ -195,6 +195,61 @@ class RoomLayoutRepository(
         dao.upsertLayoutItem(updated)
     }
 
+    override suspend fun updateItemPageAndPosition(
+        itemId: String,
+        targetPageId: String,
+        newPosition: GridPosition,
+        isExpandedMode: Boolean
+    ) {
+        val entity = dao.getLayoutItemById(itemId) ?: return
+        val isPageChanged = entity.pageId != targetPageId
+        val updated = if (isExpandedMode) {
+            entity.copy(
+                pageId = targetPageId,
+                compactX = if (isPageChanged) newPosition.x else entity.compactX,
+                compactY = if (isPageChanged) newPosition.y else entity.compactY,
+                expandedX = newPosition.x,
+                expandedY = newPosition.y
+            )
+        } else {
+            entity.copy(
+                pageId = targetPageId,
+                compactX = newPosition.x,
+                compactY = newPosition.y,
+                expandedX = if (isPageChanged && entity.expandedX != null) newPosition.x else entity.expandedX,
+                expandedY = if (isPageChanged && entity.expandedY != null) newPosition.y else entity.expandedY
+            )
+        }
+        dao.upsertLayoutItem(updated)
+    }
+
+    override suspend fun updateItemSpan(
+        itemId: String,
+        spanX: Int,
+        spanY: Int,
+        adjustedCompactPosition: GridPosition?,
+        adjustedExpandedPosition: GridPosition?
+    ) {
+        val entity = dao.getLayoutItemById(itemId) ?: return
+        val updated = entity.copy(
+            spanX = spanX.coerceAtLeast(1),
+            spanY = spanY.coerceAtLeast(1),
+            compactX = adjustedCompactPosition?.x ?: entity.compactX,
+            compactY = adjustedCompactPosition?.y ?: entity.compactY,
+            expandedX = adjustedExpandedPosition?.x ?: entity.expandedX,
+            expandedY = adjustedExpandedPosition?.y ?: entity.expandedY
+        )
+        dao.upsertLayoutItem(updated)
+    }
+
+    override suspend fun updateWidgetId(
+        itemId: String,
+        appWidgetId: Int
+    ) {
+        val entity = dao.getLayoutItemById(itemId) ?: return
+        dao.upsertLayoutItem(entity.copy(appWidgetId = appWidgetId))
+    }
+
     override suspend fun deleteLayoutItem(itemId: String) {
         dao.deleteLayoutItemById(itemId)
     }

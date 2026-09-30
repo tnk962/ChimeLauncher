@@ -44,6 +44,29 @@ interface LayoutRepository {
         isExpandedMode: Boolean
     )
 
+    /** ページを跨いでアイテムの所属ページ（pageId）と座標を更新する */
+    suspend fun updateItemPageAndPosition(
+        itemId: String,
+        targetPageId: String,
+        newPosition: GridPosition,
+        isExpandedMode: Boolean
+    )
+
+    /** アイテム（主にWidget）のセルサイズ（spanX × spanY）および必要に応じて調整後の座標を更新する */
+    suspend fun updateItemSpan(
+        itemId: String,
+        spanX: Int,
+        spanY: Int,
+        adjustedCompactPosition: GridPosition? = null,
+        adjustedExpandedPosition: GridPosition? = null
+    )
+
+    /** Widgetアイテムの appWidgetId を更新する（復元後の再バインド時など） */
+    suspend fun updateWidgetId(
+        itemId: String,
+        appWidgetId: Int
+    )
+
     /** アイテムをホーム画面から削除する */
     suspend fun deleteLayoutItem(itemId: String)
 

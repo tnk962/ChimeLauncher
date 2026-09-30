@@ -3,6 +3,7 @@ package com.myenvironment.launcher.ui.components
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlin.math.abs
@@ -12,27 +13,39 @@ import kotlin.math.abs
  *
  * - PointerEventPass.Initial で垂直スワイプを先行判定することで、グリッド内セルやアイコンの combinedClickable に
  *   イベントを奪われることなく、素早いフリックでも確実に検索・通知シェードを発火させる。
+ * - 縦スクロール可能なウィジェット（Google Keepのメモ一覧、カレンダー予定リスト等）の上でタッチが開始された場合は
+ *   [shouldIgnoreTouchAt] により即座にスルーし、通知シェードや検索オーバーレイを誤発火させずウィジェットのスクロールのみを反応させる。
  * - All Apps ページや SearchOverlay、Discover ページなどの縦スクロール画面には適用しないことで、
  *   スクロール操作との競合を完全に防ぐ。
  */
 fun Modifier.launcherVerticalSwipeGestures(
     enabled: Boolean = true,
     thresholdPx: Float = 75f,
+    shouldIgnoreTouchAt: (Offset) -> Boolean = { false },
     onSwipeUp: () -> Unit,
     onSwipeDown: () -> Unit
 ): Modifier {
     if (!enabled) return this
-    return this.pointerInput(enabled, thresholdPx, onSwipeUp, onSwipeDown) {
+    return this.pointerInput(enabled, thresholdPx, shouldIgnoreTouchAt, onSwipeUp, onSwipeDown) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            val startX = down.position.x
-            val startY = down.position.y
+            val startPos = down.position
+            if (shouldIgnoreTouchAt(startPos)) {
+                return@awaitEachGesture
+            }
+
+            val startX = startPos.x
+            val startY = startPos.y
             val downTime = down.uptimeMillis
             var triggered = false
 
             while (!triggered) {
                 val event = awaitPointerEvent(pass = PointerEventPass.Initial)
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
+
+                if (shouldIgnoreTouchAt(startPos)) {
+                    break
+                }
 
                 val dx = change.position.x - startX
                 val dy = change.position.y - startY

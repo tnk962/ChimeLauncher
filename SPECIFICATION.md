@@ -953,32 +953,19 @@ Google Appモードの場合、
 
 # 30. Widget
 
-MVPでは一般的なWidget自由配置は実装しない。
+MVP初期仕様（v0.1）では一般的なWidget自由配置を必須外としていたが、**v0.6.0 にて Android 標準の `AppWidgetHost` / `AppWidgetManager` を用いたホーム画面 AppWidget 自由配置機能を完全実装済み**。
 
-理由：
-
-```text
-AppWidgetHost
-Widget Picker
-Binding
-Resize
-Drag
-Provider Configuration
-```
-
-等によりLauncher実装量が大きく増加するため。
-
-AndroidではLauncherのようなアプリが `AppWidgetHost` を実装することで他アプリのWidgetを埋め込める。
-
-将来的に必要性が高ければ、
+実装済み要素：
 
 ```text
-Google Calendar Widget
+AppWidgetHost (LauncherAppWidgetHost / LauncherAppWidgetHostView)
+Widget Picker (ItemPickerDialog 内「Widget」タブ・検索・推奨セルサイズ算出)
+Binding (bindAppWidgetIdIfAllowed + ACTION_APPWIDGET_BIND 権限要求)
+Resize (WidgetResizeDialog による spanX × spanY 変更 + updateAppWidgetSize)
+Drag (HomeGridPage マルチセル占有計算・ドラッグ移動)
+Provider Configuration (startAppWidgetConfigureActivityForResult 対応)
+Backup / Rebind (Room DB v2 永続化・JSONバックアップ・復元後のワンタップ再バインド)
 ```
-
-のみを最初のWidget対応候補とする。
-
-**MVPでは必須ではない。**
 
 ---
 

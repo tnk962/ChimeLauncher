@@ -70,7 +70,8 @@ class JsonBackupManager(
                         compact = item.compact,
                         expanded = item.expanded,
                         spanX = item.spanX,
-                        spanY = item.spanY
+                        spanY = item.spanY,
+                        appWidgetId = item.appWidgetId
                     )
                 }
             BackupPage(
@@ -200,7 +201,7 @@ class JsonBackupManager(
                 )
             }
 
-            // 未インストールアプリも自動削除せずそのままLayoutItemとして復元する (仕様 24)
+            // 未インストールアプリやWidgetも自動削除せずそのままLayoutItemとして復元する (仕様 24)
             backupPage.items.forEach { bItem ->
                 restoredLayoutItems.add(
                     LayoutItem(
@@ -214,7 +215,8 @@ class JsonBackupManager(
                         compact = bItem.compact,
                         expanded = bItem.expanded,
                         spanX = bItem.spanX.coerceAtLeast(1),
-                        spanY = bItem.spanY.coerceAtLeast(1)
+                        spanY = bItem.spanY.coerceAtLeast(1),
+                        appWidgetId = bItem.appWidgetId
                     )
                 )
             }

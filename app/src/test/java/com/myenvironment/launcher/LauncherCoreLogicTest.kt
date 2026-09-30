@@ -13,6 +13,10 @@ import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.core.model.LauncherSettings
 import com.myenvironment.launcher.core.model.LayoutItem
 import com.myenvironment.launcher.core.search.DefaultSearchEngine
+import androidx.compose.ui.geometry.Offset
+import com.myenvironment.launcher.core.widget.WidgetHostManager
+import com.myenvironment.launcher.ui.LauncherViewModel
+import com.myenvironment.launcher.ui.home.HomePageGridMetrics
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -298,5 +302,262 @@ class LauncherCoreLogicTest {
         assertEquals(1, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_HOME))
         assertEquals(2, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, "page_2"))
         assertEquals(3, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_SETTINGS))
+    }
+
+    @Test
+    fun `LayoutItem occupiedCells and resolveClampedPosition handle multi-cell widgets`() {
+        val widgetItem = LayoutItem(
+            id = "widget_1",
+            pageId = LauncherPage.PAGE_ID_HOME,
+            type = ItemType.WIDGET,
+            packageName = "com.google.android.calendar",
+            activityName = "com.google.android.calendar.widget.MonthWidgetProvider",
+            label = "Google Calendar",
+            appWidgetId = 101,
+            compact = GridPosition(x = 3, y = 5),
+            spanX = 4,
+            spanY = 2
+        )
+
+        // 5x6 グリッドでは (3, 5) に 4x2 ウィジェットははみ出すため、(1, 4) にクランプされること
+        val clamped = widgetItem.resolveClampedPosition(isExpanded = false, columns = 5, rows = 6)
+        assertEquals(GridPosition(1, 4), clamped)
+
+        val cells = widgetItem.occupiedCells(isExpanded = false, columns = 5, rows = 6)
+        assertEquals(8, cells.size)
+        assertTrue(cells.contains(GridPosition(1, 4)))
+        assertTrue(cells.contains(GridPosition(4, 5)))
+    }
+
+    @Test
+    fun `WidgetHostManager calculateDefaultSpan converts dp and targetCells to grid span`() {
+        // targetCellWidth / targetCellHeight が指定されている場合はそれを優先（最大グリッド数でクランプ）
+        assertEquals(
+            4 to 2,
+            WidgetHostManager.calculateDefaultSpan(
+                minWidthDp = 250,
+                minHeightDp = 110,
+                targetCellWidth = 4,
+                targetCellHeight = 2,
+                maxColumns = 5,
+                maxRows = 6
+            )
+        )
+
+        // targetCell が 0 の場合は (dp + 30) / 70 で換算
+        assertEquals(
+            4 to 2,
+            WidgetHostManager.calculateDefaultSpan(
+                minWidthDp = 250,
+                minHeightDp = 110,
+                targetCellWidth = 0,
+                targetCellHeight = 0,
+                maxColumns = 5,
+                maxRows = 6
+            )
+        )
+    }
+
+    @Test
+    fun `findBestGridPlacementForSpan avoids collisions for multi-cell widgets`() {
+        val existingItems = listOf(
+            // (0, 0) に 1x1 アプリアイコン
+            LayoutItem(
+                id = "app_1",
+                pageId = LauncherPage.PAGE_ID_HOME,
+                type = ItemType.APP,
+                packageName = "com.example.app1",
+                label = "App 1",
+                compact = GridPosition(0, 0)
+            ),
+            // (1, 0) に 4x1 ウィジェット -> 0行目はすべて埋まる
+            LayoutItem(
+                id = "widget_top",
+                pageId = LauncherPage.PAGE_ID_HOME,
+                type = ItemType.WIDGET,
+                packageName = "com.example.clock",
+                activityName = "com.example.clock.ClockWidget",
+                label = "Clock",
+                compact = GridPosition(1, 0),
+                spanX = 4,
+                spanY = 1
+            )
+        )
+
+        // 5x6 グリッドに 3x2 ウィジェットを配置すると、0行目は埋まっているため (0, 1) が選ばれること
+        val (pos, span) = LauncherViewModel.findBestGridPlacementForSpan(
+            existingItems = existingItems,
+            requestedSpanX = 3,
+            requestedSpanY = 2,
+            preferredCell = null,
+            isExpandedMode = false,
+            columns = 5,
+            rows = 6
+        )
+        assertEquals(GridPosition(0, 1), pos)
+        assertEquals(3 to 2, span)
+    }
+
+    @Test
+    fun `BackupPayload serializes and deserializes WIDGET items with span and appWidgetId`() {
+        val json = Json {
+            prettyPrint = true
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+
+        val payload = BackupPayload(
+            schemaVersion = 1,
+            createdAt = "2026-09-30T12:00:00+09:00",
+            pages = listOf(
+                BackupPage(
+                    id = LauncherPage.PAGE_ID_HOME,
+                    name = "HOME",
+                    items = listOf(
+                        BackupLayoutItem(
+                            id = "widget_cal",
+                            type = ItemType.WIDGET,
+                            packageName = "com.google.android.calendar",
+                            activityName = "com.google.android.calendar.widget.MonthWidgetProvider",
+                            label = "カレンダー",
+                            appWidgetId = 42,
+                            compact = GridPosition(0, 0),
+                            expanded = GridPosition(2, 1),
+                            spanX = 4,
+                            spanY = 3
+                        )
+                    )
+                )
+            ),
+            dock = emptyList(),
+            settings = LauncherSettings()
+        )
+
+        val encoded = json.encodeToString(payload)
+        val decoded = json.decodeFromString<BackupPayload>(encoded)
+        val restoredWidget = decoded.pages.first().items.first()
+
+        assertEquals(ItemType.WIDGET, restoredWidget.type)
+        assertEquals(42, restoredWidget.appWidgetId)
+        assertEquals(4, restoredWidget.spanX)
+        assertEquals(3, restoredWidget.spanY)
+        assertEquals("com.google.android.calendar.widget.MonthWidgetProvider", restoredWidget.activityName)
+    }
+
+    @Test
+    fun `HomePageGridMetrics resolveDropCell maps root coordinates and clamps multi-cell span`() {
+        val metrics = HomePageGridMetrics(
+            pageId = "page_2",
+            boundsInRoot = androidx.compose.ui.geometry.Rect(
+                left = 100f,
+                top = 200f,
+                right = 600f,
+                bottom = 800f
+            ),
+            columns = 5,
+            rows = 6,
+            cellWidthPx = 100f,
+            cellHeightPx = 100f,
+            isExpanded = false
+        )
+
+        // (100 + 210, 200 + 310) -> cellWidth=100, cellHeight=100 -> ((210 + 50)/100)=2, ((310 + 50)/100)=3
+        val cellForSingle = metrics.resolveDropCell(
+            topLeftInRoot = Offset(x = 310f, y = 510f),
+            spanX = 1,
+            spanY = 1
+        )
+        assertEquals(GridPosition(2, 3), cellForSingle)
+
+        // 4x3 ウィジェットを右端付近にドロップした場合は (columns - spanX, rows - spanY) = (1, 3) にクランプされること
+        val cellForLargeWidget = metrics.resolveDropCell(
+            topLeftInRoot = Offset(x = 550f, y = 750f),
+            spanX = 4,
+            spanY = 3
+        )
+        assertEquals(GridPosition(1, 3), cellForLargeWidget)
+
+        // 高密度表示用の仮想スケール定数が 0.85f (1未満の拡大キャンバス比率) であること
+        assertTrue(WidgetHostManager.WIDGET_CONTENT_SCALE in 0.7f..0.95f)
+    }
+
+    @Test
+    fun `isTouchInsideScrollableWidget ignores vertical swipe only on scrollable widgets like Keep`() {
+        val keepWidget = LayoutItem(
+            id = "widget_keep",
+            pageId = LauncherPage.PAGE_ID_HOME,
+            type = ItemType.WIDGET,
+            packageName = "com.google.android.keep",
+            activityName = "com.google.android.keep.widget.MemoryAppWidgetProvider",
+            label = "Keep メモ",
+            appWidgetId = 201,
+            compact = GridPosition(x = 0, y = 0),
+            spanX = 3,
+            spanY = 3
+        )
+        val clockWidget = LayoutItem(
+            id = "widget_clock",
+            pageId = LauncherPage.PAGE_ID_HOME,
+            type = ItemType.WIDGET,
+            packageName = "com.google.android.deskclock",
+            activityName = "com.android.alarmclock.DigitalAppWidgetProvider",
+            label = "時計",
+            appWidgetId = 202,
+            compact = GridPosition(x = 3, y = 0),
+            spanX = 2,
+            spanY = 1
+        )
+        val appIcon = LayoutItem(
+            id = "app_chrome",
+            pageId = LauncherPage.PAGE_ID_HOME,
+            type = ItemType.APP,
+            packageName = "com.android.chrome",
+            label = "Chrome",
+            compact = GridPosition(x = 0, y = 4)
+        )
+        val items = listOf(keepWidget, clockWidget, appIcon)
+        val scrollableCheck: (LayoutItem) -> Boolean = { it.appWidgetId == 201 }
+
+        // 1. スクロール可能な Keep ウィジェット (0..300, 0..300) 上のタッチ -> true（ランチャーの検索・通知スワイプを無効化し、Keepのスクロールのみ反応）
+        assertTrue(
+            com.myenvironment.launcher.ui.home.isTouchInsideScrollableWidget(
+                touchOffset = Offset(150f, 150f),
+                items = items,
+                isExpanded = false,
+                columns = 5,
+                rows = 6,
+                cellWidthPx = 100f,
+                cellHeightPx = 100f,
+                isWidgetScrollable = scrollableCheck
+            )
+        )
+
+        // 2. スクロールしない時計ウィジェット (300..500, 0..100) 上のタッチ -> false（ランチャーの検索・通知スワイプが反応）
+        org.junit.Assert.assertFalse(
+            com.myenvironment.launcher.ui.home.isTouchInsideScrollableWidget(
+                touchOffset = Offset(400f, 50f),
+                items = items,
+                isExpanded = false,
+                columns = 5,
+                rows = 6,
+                cellWidthPx = 100f,
+                cellHeightPx = 100f,
+                isWidgetScrollable = scrollableCheck
+            )
+        )
+
+        // 3. 通常アプリアイコンや空白セル上のタッチ -> false（ランチャーの検索・通知スワイプが反応）
+        org.junit.Assert.assertFalse(
+            com.myenvironment.launcher.ui.home.isTouchInsideScrollableWidget(
+                touchOffset = Offset(50f, 450f),
+                items = items,
+                isExpanded = false,
+                columns = 5,
+                rows = 6,
+                cellWidthPx = 100f,
+                cellHeightPx = 100f,
+                isWidgetScrollable = scrollableCheck
+            )
+        )
     }
 }

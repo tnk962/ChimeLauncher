@@ -1,12 +1,18 @@
 package com.myenvironment.launcher.ui
 
+import android.app.Activity
+import android.appwidget.AppWidgetManager
+import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +22,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -27,8 +35,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pages
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -41,6 +52,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,31 +61,60 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.myenvironment.launcher.MainActivity
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
+import com.myenvironment.launcher.core.model.GridPosition
+import com.myenvironment.launcher.core.model.ItemType
 import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.ui.adaptive.AdaptiveLayoutSpec
 import com.myenvironment.launcher.ui.adaptive.DockPlacement
 import com.myenvironment.launcher.ui.adaptive.rememberAdaptiveLayoutSpec
 import com.myenvironment.launcher.ui.allapps.AllAppsTinyPage
+import com.myenvironment.launcher.ui.components.LauncherItemGraphic
 import com.myenvironment.launcher.ui.discover.DiscoverPage
 import com.myenvironment.launcher.ui.dock.AdaptiveDock
 import com.myenvironment.launcher.ui.editor.HomeEditSheet
 import com.myenvironment.launcher.ui.editor.ItemPickerDialog
 import com.myenvironment.launcher.ui.editor.LockedAlertDialog
 import com.myenvironment.launcher.ui.editor.PageManagerDialog
+import com.myenvironment.launcher.ui.editor.WidgetResizeDialog
+import com.myenvironment.launcher.ui.home.CrossPageDragState
 import com.myenvironment.launcher.ui.home.HomeGridPage
+import com.myenvironment.launcher.ui.home.HomePageGridMetrics
 import com.myenvironment.launcher.ui.home.MissingAppDialog
 import com.myenvironment.launcher.ui.search.SearchOverlay
 import com.myenvironment.launcher.ui.settings.JsonBackupPreviewDialog
 import com.myenvironment.launcher.ui.settings.SettingsScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.roundToInt
+
+/**
+ * 固定特殊ページ（Discover / All Apps / 設定）以外の、アイコン・ウィジェットを自由配置できるホームページかどうか
+ */
+internal fun LauncherPage.isEditableHomePage(): Boolean {
+    return id != LauncherPage.PAGE_ID_DISCOVER &&
+        id != LauncherPage.PAGE_ID_ALL_APPS &&
+        id != LauncherPage.PAGE_ID_SETTINGS
+}
 
 /**
  * Fold展開時（左右2ページ見開きモード）のページャースロットモデル
@@ -168,10 +209,59 @@ fun LauncherScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val hapticFeedback = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
+
+    // AppWidget バインド許可ダイアログ用 ActivityResultLauncher
+    val widgetBindLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        viewModel.onWidgetBindActivityResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    // AppWidget バインド・設定 Activity 起動イベント購読
+    LaunchedEffect(viewModel, context) {
+        viewModel.widgetSystemEvents.collect { event ->
+            when (event) {
+                is WidgetSystemEvent.RequestBindAppWidget -> {
+                    val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, event.appWidgetId)
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, event.provider)
+                    }
+                    runCatching {
+                        widgetBindLauncher.launch(intent)
+                    }.onFailure {
+                        viewModel.onWidgetBindActivityResult(false)
+                    }
+                }
+
+                is WidgetSystemEvent.RequestConfigureAppWidget -> {
+                    val activity = context as? Activity
+                    if (activity != null) {
+                        runCatching {
+                            viewModel.widgetHostManager.appWidgetHost.startAppWidgetConfigureActivityForResult(
+                                activity,
+                                event.appWidgetId,
+                                0,
+                                MainActivity.REQUEST_CODE_CONFIGURE_APPWIDGET,
+                                null
+                            )
+                        }.onFailure {
+                            // 設定 Activity の起動に失敗した場合もウィジェット配置自体は継続できるようにする
+                            viewModel.onWidgetConfigureActivityResult(true)
+                        }
+                    } else {
+                        viewModel.onWidgetConfigureActivityResult(true)
+                    }
+                }
+            }
+        }
+    }
 
     val adaptiveSpec = rememberAdaptiveLayoutSpec(uiState.settings)
     val pages = uiState.pages
+    val editableHomePages = remember(pages) { pages.filter { it.isEditableHomePage() } }
     val homePageIndex = uiState.homePageIndex
 
     // Fold展開時に2ページ見開き表示を行うかどうか
@@ -201,6 +291,206 @@ fun LauncherScreen(
         initialPage = initialDualSlotIndex.coerceIn(0, (dualSlots.size - 1).coerceAtLeast(0)),
         pageCount = { dualSlots.size }
     )
+
+    // --- ページ跨ぎドラッグ＆ドロップ状態と各ページの画面座標メトリクス ---
+    var activeDragState by remember { mutableStateOf<CrossPageDragState?>(null) }
+    val pageMetricsMap = remember { mutableStateMapOf<String, HomePageGridMetrics>() }
+    var rootBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
+    var pagerBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
+
+    // 編集モード終了時はドラッグ状態をクリア
+    LaunchedEffect(uiState.overlay.isEditMode) {
+        if (!uiState.overlay.isEditMode) {
+            activeDragState = null
+        }
+    }
+
+    /**
+     * 現在ドラッグ中のアイテムがドロップされる対象ページID・メトリクス・セル座標を算出する。
+     */
+    fun resolveDropTarget(drag: CrossPageDragState): Triple<String, HomePageGridMetrics, GridPosition>? {
+        val sourceMetrics = pageMetricsMap[drag.sourcePageId]
+        if (isDualPageMode) {
+            val slot = dualSlots.getOrNull(dualPagerState.currentPage.coerceIn(0, dualSlots.lastIndex))
+            val candidatePageIds = slot?.visiblePageIds.orEmpty().filter { pageId ->
+                pages.find { it.id == pageId }?.isEditableHomePage() == true
+            }
+            val centerX = drag.topLeftInRoot.x + drag.itemWidthPx / 2f
+            val targetId = candidatePageIds.minByOrNull { pageId ->
+                val b = pageMetricsMap[pageId]?.boundsInRoot
+                if (b == null) {
+                    Float.MAX_VALUE
+                } else if (centerX in b.left..b.right) {
+                    0f
+                } else {
+                    min(abs(centerX - b.left), abs(centerX - b.right))
+                }
+            } ?: candidatePageIds.firstOrNull() ?: drag.sourcePageId
+
+            val metrics = pageMetricsMap[targetId] ?: sourceMetrics ?: return null
+            val cell = metrics.resolveDropCell(drag.topLeftInRoot, drag.spanX, drag.spanY)
+            return Triple(targetId, metrics, cell)
+        } else {
+            val currentP = pages.getOrNull(singlePagerState.currentPage.coerceIn(0, pages.lastIndex))
+            val targetId = if (currentP != null && currentP.isEditableHomePage()) {
+                currentP.id
+            } else {
+                drag.sourcePageId
+            }
+            val rawMetrics = pageMetricsMap[targetId] ?: sourceMetrics ?: return null
+            // ページ遷移直後で boundsInRoot がスクロール前の座標だった場合は pagerBoundsInRoot を基準に補正
+            val effectiveMetrics = if (pagerBoundsInRoot.width > 0f) {
+                rawMetrics.copy(boundsInRoot = pagerBoundsInRoot)
+            } else {
+                rawMetrics
+            }
+            val cell = effectiveMetrics.resolveDropCell(drag.topLeftInRoot, drag.spanX, drag.spanY)
+            return Triple(targetId, effectiveMetrics, cell)
+        }
+    }
+
+    val currentDropTarget = remember(
+        activeDragState,
+        isDualPageMode,
+        singlePagerState.currentPage,
+        dualPagerState.currentPage,
+        pagerBoundsInRoot
+    ) {
+        activeDragState?.let { resolveDropTarget(it) }
+    }
+
+    // --- ドラッグ中の画面左右端ホバーによるページ自動遷移 (約0.65秒キープで隣接ページへ遷移) ---
+    val edgeHoverZonePx = with(density) { 54.dp.toPx() }
+    val currentDrag = activeDragState
+    val edgeHoverDirection: Int = when {
+        currentDrag == null || pagerBoundsInRoot.width <= 0f -> 0
+        currentDrag.fingerInRoot.x <= pagerBoundsInRoot.left + edgeHoverZonePx -> -1
+        currentDrag.fingerInRoot.x >= pagerBoundsInRoot.right - edgeHoverZonePx -> 1
+        else -> 0
+    }
+
+    // 現在のホバー方向で遷移可能なページがあるか（または右端で新規ページ作成可能か）を判定
+    val edgeTransitionHint: String? = remember(
+        edgeHoverDirection,
+        isDualPageMode,
+        singlePagerState.currentPage,
+        dualPagerState.currentPage,
+        pages,
+        dualSlots
+    ) {
+        if (edgeHoverDirection == 0) {
+            null
+        } else if (isDualPageMode) {
+            val curSlotIdx = dualPagerState.currentPage
+            if (edgeHoverDirection < 0) {
+                val prevSlot = dualSlots.getOrNull(curSlotIdx - 1)
+                val hasHome = prevSlot?.visiblePageIds?.any { id ->
+                    pages.find { it.id == id }?.isEditableHomePage() == true
+                } == true
+                if (hasHome) "◀ そのままキープで左のページへ" else null
+            } else {
+                val nextSlot = dualSlots.getOrNull(curSlotIdx + 1)
+                val hasHome = nextSlot?.visiblePageIds?.any { id ->
+                    pages.find { it.id == id }?.isEditableHomePage() == true
+                } == true
+                if (hasHome) "そのままキープで右のページへ ▶" else "＋ そのままキープで新規ページ作成 ▶"
+            }
+        } else {
+            val curIdx = singlePagerState.currentPage
+            if (edgeHoverDirection < 0) {
+                val prevPage = pages.getOrNull(curIdx - 1)?.takeIf { it.isEditableHomePage() }
+                if (prevPage != null) "◀ そのままキープで「${prevPage.name}」へ" else null
+            } else {
+                val nextPage = pages.getOrNull(curIdx + 1)
+                if (nextPage != null && nextPage.isEditableHomePage()) {
+                    "そのままキープで「${nextPage.name}」へ ▶"
+                } else {
+                    "＋ そのままキープで新規ページ作成 ▶"
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(
+        activeDragState != null,
+        edgeHoverDirection,
+        isDualPageMode,
+        singlePagerState.currentPage,
+        dualPagerState.currentPage
+    ) {
+        if (activeDragState == null || edgeHoverDirection == 0 || edgeTransitionHint == null) {
+            return@LaunchedEffect
+        }
+        // 画面端で約0.65秒ホバーし続けたらページを遷移する
+        delay(650L)
+        if (activeDragState == null) return@LaunchedEffect
+
+        if (isDualPageMode) {
+            val curSlotIdx = dualPagerState.currentPage
+            if (edgeHoverDirection < 0) {
+                val targetSlotIdx = curSlotIdx - 1
+                val prevSlot = dualSlots.getOrNull(targetSlotIdx)
+                val hasHome = prevSlot?.visiblePageIds?.any { id ->
+                    pages.find { it.id == id }?.isEditableHomePage() == true
+                } == true
+                if (hasHome) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    dualPagerState.animateScrollToPage(targetSlotIdx)
+                }
+            } else {
+                val targetSlotIdx = curSlotIdx + 1
+                val nextSlot = dualSlots.getOrNull(targetSlotIdx)
+                val hasHome = nextSlot?.visiblePageIds?.any { id ->
+                    pages.find { it.id == id }?.isEditableHomePage() == true
+                } == true
+                if (hasHome) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    dualPagerState.animateScrollToPage(targetSlotIdx)
+                } else {
+                    // 右端の最終ページでさらに右端ホバーした場合は新規ページを作成して遷移
+                    val created = viewModel.createUserPageForDrag()
+                    if (created != null) {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        focusedPageId = created.id
+                        delay(80L)
+                        val updatedSlots = buildExpandedDualSlots(viewModel.uiState.value.pages)
+                        val newSlotIdx = resolveExpandedDualSlotIndex(updatedSlots, created.id)
+                        dualPagerState.animateScrollToPage(newSlotIdx)
+                    }
+                }
+            }
+        } else {
+            val curIdx = singlePagerState.currentPage
+            if (edgeHoverDirection < 0) {
+                val targetIdx = curIdx - 1
+                val prevPage = pages.getOrNull(targetIdx)?.takeIf { it.isEditableHomePage() }
+                if (prevPage != null) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    singlePagerState.animateScrollToPage(targetIdx)
+                }
+            } else {
+                val targetIdx = curIdx + 1
+                val nextPage = pages.getOrNull(targetIdx)
+                if (nextPage != null && nextPage.isEditableHomePage()) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    singlePagerState.animateScrollToPage(targetIdx)
+                } else {
+                    // 右端の最終ホームページでさらに右端ホバーした場合は新規ページを作成して遷移
+                    val created = viewModel.createUserPageForDrag()
+                    if (created != null) {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        focusedPageId = created.id
+                        delay(80L)
+                        val updatedPages = viewModel.uiState.value.pages
+                        val newIdx = updatedPages.indexOfFirst { it.id == created.id }
+                        if (newIdx >= 0) {
+                            singlePagerState.animateScrollToPage(newIdx)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Compact (1ページ) <-> Expanded (2ページ見開き) 切替時に、見ていたページへ即座に同期
     LaunchedEffect(isDualPageMode, pages.size, dualSlots.size) {
@@ -306,11 +596,13 @@ fun LauncherScreen(
     // Backボタン押下時：オーバーレイや編集モードを閉じ、HOME以外のページにいる場合はHOMEへ戻す (仕様 4)
     val shouldInterceptBack = uiState.overlay.isSearchOverlayOpen ||
         uiState.overlay.isSettingsOpen ||
+        uiState.overlay.resizingWidgetTarget != null ||
         uiState.overlay.isEditMode ||
         currentPage.id != LauncherPage.PAGE_ID_HOME
 
     BackHandler(enabled = shouldInterceptBack) {
         when {
+            uiState.overlay.resizingWidgetTarget != null -> viewModel.dismissResizeWidgetDialog()
             uiState.overlay.isSearchOverlayOpen -> viewModel.closeSearchOverlay()
             uiState.overlay.isSettingsOpen -> viewModel.closeSettings()
             uiState.overlay.isEditMode -> viewModel.exitEditMode()
@@ -320,11 +612,37 @@ fun LauncherScreen(
         }
     }
 
+    val handleDragStart: (CrossPageDragState) -> Unit = { state ->
+        activeDragState = state
+    }
+    val handleDragUpdate: (CrossPageDragState) -> Unit = { state ->
+        activeDragState = state
+    }
+    val handleDragCancel: () -> Unit = {
+        activeDragState = null
+    }
+    val handleDragEnd: (CrossPageDragState) -> Unit = { finalState ->
+        val resolved = resolveDropTarget(finalState)
+        activeDragState = null
+        if (resolved != null) {
+            val (targetPageId, targetMetrics, targetCell) = resolved
+            viewModel.moveLayoutItem(
+                item = finalState.item,
+                newPosition = targetCell,
+                isExpandedMode = targetMetrics.isExpanded,
+                targetPageId = targetPageId
+            )
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
+            .onGloballyPositioned { coords ->
+                rootBoundsInRoot = coords.boundsInRoot()
+            }
     ) {
         if (adaptiveSpec.dockPlacement == DockPlacement.BOTTOM) {
             // Compact (Fold Closed) -> [Pager + Bottom Dock]
@@ -332,16 +650,22 @@ fun LauncherScreen(
                 EditModeBanner(
                     visible = uiState.overlay.isEditMode,
                     currentPage = currentPage,
-                    onAddApp = { viewModel.requestAddItemToPage(currentPage) },
+                    onAddApp = { viewModel.requestAddItemToPage(currentPage, initialTab = 0) },
+                    onAddWidget = { viewModel.requestAddItemToPage(currentPage, initialTab = 1) },
                     onManagePages = { viewModel.openPageManager() },
                     onFinishEdit = { viewModel.exitEditMode() }
                 )
 
                 HorizontalPager(
                     state = singlePagerState,
+                    beyondViewportPageCount = pages.size.coerceAtLeast(1),
+                    userScrollEnabled = activeDragState == null,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .onGloballyPositioned { coords ->
+                            pagerBoundsInRoot = coords.boundsInRoot()
+                        }
                 ) { pageIndex ->
                     val page = pages.getOrNull(pageIndex) ?: LauncherPage.FIXED_HOME
                     LauncherPageContent(
@@ -350,6 +674,14 @@ fun LauncherScreen(
                         adaptiveSpec = adaptiveSpec,
                         isHalfPaneInDualMode = false,
                         isSettledOnDiscover = isSettledOnDiscover,
+                        activeDragState = activeDragState,
+                        highlightedDropCell = if (currentDropTarget?.first == page.id) currentDropTarget.third else null,
+                        editableHomePages = editableHomePages,
+                        onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                        onDragStartItem = handleDragStart,
+                        onDragUpdateItem = handleDragUpdate,
+                        onDragEndItem = handleDragEnd,
+                        onDragCancelItem = handleDragCancel,
                         viewModel = viewModel
                     )
                 }
@@ -389,7 +721,8 @@ fun LauncherScreen(
                     EditModeBanner(
                         visible = uiState.overlay.isEditMode,
                         currentPage = currentPage,
-                        onAddApp = { viewModel.requestAddItemToPage(currentPage) },
+                        onAddApp = { viewModel.requestAddItemToPage(currentPage, initialTab = 0) },
+                        onAddWidget = { viewModel.requestAddItemToPage(currentPage, initialTab = 1) },
                         onManagePages = { viewModel.openPageManager() },
                         onFinishEdit = { viewModel.exitEditMode() }
                     )
@@ -398,9 +731,14 @@ fun LauncherScreen(
                         // 左右2ページ見開きモード（Discover と 設定 は 1ページ全画面固定、他は左右2ページ見開き）
                         HorizontalPager(
                             state = dualPagerState,
+                            beyondViewportPageCount = dualSlots.size.coerceAtLeast(1),
+                            userScrollEnabled = activeDragState == null,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
+                                .onGloballyPositioned { coords ->
+                                    pagerBoundsInRoot = coords.boundsInRoot()
+                                }
                         ) { slotIndex ->
                             val slot = dualSlots.getOrNull(slotIndex)
                                 ?: ExpandedPagerSlot.SingleFull(LauncherPage.FIXED_HOME)
@@ -413,6 +751,14 @@ fun LauncherScreen(
                                         adaptiveSpec = adaptiveSpec,
                                         isHalfPaneInDualMode = false,
                                         isSettledOnDiscover = isSettledOnDiscover,
+                                        activeDragState = activeDragState,
+                                        highlightedDropCell = if (currentDropTarget?.first == slot.page.id) currentDropTarget.third else null,
+                                        editableHomePages = editableHomePages,
+                                        onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                                        onDragStartItem = handleDragStart,
+                                        onDragUpdateItem = handleDragUpdate,
+                                        onDragEndItem = handleDragEnd,
+                                        onDragCancelItem = handleDragCancel,
                                         viewModel = viewModel
                                     )
                                 }
@@ -430,6 +776,14 @@ fun LauncherScreen(
                                                 adaptiveSpec = adaptiveSpec,
                                                 isHalfPaneInDualMode = true,
                                                 isSettledOnDiscover = isSettledOnDiscover,
+                                                activeDragState = activeDragState,
+                                                highlightedDropCell = if (currentDropTarget?.first == slot.leftPage.id) currentDropTarget.third else null,
+                                                editableHomePages = editableHomePages,
+                                                onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                                                onDragStartItem = handleDragStart,
+                                                onDragUpdateItem = handleDragUpdate,
+                                                onDragEndItem = handleDragEnd,
+                                                onDragCancelItem = handleDragCancel,
                                                 viewModel = viewModel
                                             )
                                         }
@@ -453,6 +807,14 @@ fun LauncherScreen(
                                                 adaptiveSpec = adaptiveSpec,
                                                 isHalfPaneInDualMode = true,
                                                 isSettledOnDiscover = isSettledOnDiscover,
+                                                activeDragState = activeDragState,
+                                                highlightedDropCell = if (currentDropTarget?.first == slot.rightPage.id) currentDropTarget.third else null,
+                                                editableHomePages = editableHomePages,
+                                                onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                                                onDragStartItem = handleDragStart,
+                                                onDragUpdateItem = handleDragUpdate,
+                                                onDragEndItem = handleDragEnd,
+                                                onDragCancelItem = handleDragCancel,
                                                 viewModel = viewModel
                                             )
                                         }
@@ -464,9 +826,14 @@ fun LauncherScreen(
                         // Expanded 1ページ全画面表示モード
                         HorizontalPager(
                             state = singlePagerState,
+                            beyondViewportPageCount = pages.size.coerceAtLeast(1),
+                            userScrollEnabled = activeDragState == null,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
+                                .onGloballyPositioned { coords ->
+                                    pagerBoundsInRoot = coords.boundsInRoot()
+                                }
                         ) { pageIndex ->
                             val page = pages.getOrNull(pageIndex) ?: LauncherPage.FIXED_HOME
                             LauncherPageContent(
@@ -475,6 +842,14 @@ fun LauncherScreen(
                                 adaptiveSpec = adaptiveSpec,
                                 isHalfPaneInDualMode = false,
                                 isSettledOnDiscover = isSettledOnDiscover,
+                                activeDragState = activeDragState,
+                                highlightedDropCell = if (currentDropTarget?.first == page.id) currentDropTarget.third else null,
+                                editableHomePages = editableHomePages,
+                                onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                                onDragStartItem = handleDragStart,
+                                onDragUpdateItem = handleDragUpdate,
+                                onDragEndItem = handleDragEnd,
+                                onDragCancelItem = handleDragCancel,
                                 viewModel = viewModel
                             )
                         }
@@ -516,6 +891,141 @@ fun LauncherScreen(
                     onMoveDockItem = { item, delta -> viewModel.moveDockItem(item, delta) },
                     onRequestAddDockItem = { viewModel.requestAddItemToDock() }
                 )
+            }
+        }
+
+        // --- ページ跨ぎドラッグ中のフローティングプレビュー & 左右端ホバーインジケーター ---
+        val drag = activeDragState
+        if (drag != null) {
+            // 1. 画面左右端のページ遷移ゾーン視覚ガイド
+            if (edgeHoverDirection < 0 && edgeTransitionHint != null) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxHeight(0.75f)
+                        .width(44.dp)
+                        .clip(RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+                        .border(
+                            width = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChevronLeft,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            } else if (edgeHoverDirection > 0 && edgeTransitionHint != null) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(0.75f)
+                        .width(44.dp)
+                        .clip(RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+                        .border(
+                            width = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp)
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+
+            // 上部中央に現在のドロップ予定ページとホバー案内を表示
+            val targetPageName = pages.find { it.id == currentDropTarget?.first }?.name ?: currentPage.name
+            Surface(
+                color = Color(0xEE101622),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 56.dp)
+            ) {
+                Text(
+                    text = edgeTransitionHint
+                        ?: "移動先: $targetPageName ${
+                            currentDropTarget?.third?.let { "(列${it.x + 1}, 行${it.y + 1})" } ?: ""
+                        }",
+                    color = if (edgeTransitionHint != null) MaterialTheme.colorScheme.primary else Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                )
+            }
+
+            // 2. 指に追従するドラッグ中アイテム／ウィジェットのフローティングプレビュー
+            val relX = (drag.topLeftInRoot.x - rootBoundsInRoot.left).roundToInt()
+            val relY = (drag.topLeftInRoot.y - rootBoundsInRoot.top).roundToInt()
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .offset { IntOffset(relX, relY) }
+                    .size(width = drag.itemWidthDp, height = drag.itemHeightDp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xCC1A2232))
+                    .border(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+            ) {
+                if (drag.item.type == ItemType.WIDGET) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Widgets,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = drag.item.label,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "${drag.spanX}×${drag.spanY} ウィジェットを移動中",
+                            color = Color(0xFFB0BEC5),
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    }
+                } else {
+                    LauncherItemGraphic(
+                        type = drag.item.type,
+                        packageName = drag.item.packageName,
+                        activityName = drag.item.activityName,
+                        targetUri = drag.item.targetUri,
+                        label = drag.item.label,
+                        isInstalled = true,
+                        appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
+                        iconSize = 48.dp,
+                        showLabel = true,
+                        isEditMode = false
+                    )
+                }
             }
         }
 
@@ -585,8 +1095,11 @@ fun LauncherScreen(
                 onAddAppClick = {
                     viewModel.requestAddItemToPage(currentPage, initialTab = 0)
                 },
-                onAddShortcutOrActionClick = {
+                onAddWidgetClick = {
                     viewModel.requestAddItemToPage(currentPage, initialTab = 1)
+                },
+                onAddShortcutOrActionClick = {
+                    viewModel.requestAddItemToPage(currentPage, initialTab = 2)
                 },
                 onManagePagesClick = { viewModel.openPageManager() },
                 onToggleEditModeClick = { viewModel.toggleEditMode() },
@@ -621,9 +1134,14 @@ fun LauncherScreen(
                 initialTab = initialTab,
                 targetDescription = desc,
                 installedApps = uiState.installedApps,
+                availableWidgets = uiState.availableWidgets,
+                allowWidgets = pickerTarget is ItemPickerTarget.HomePageCell,
                 appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
                 onSelectApp = { app ->
                     viewModel.addAppFromPicker(app, useExpandedCoord)
+                },
+                onSelectWidget = { widget ->
+                    viewModel.addWidgetFromPicker(widget, useExpandedCoord)
                 },
                 onSelectAction = { action ->
                     viewModel.addActionFromPicker(action, useExpandedCoord)
@@ -635,7 +1153,36 @@ fun LauncherScreen(
             )
         }
 
-        // 6. ページ管理ダイアログ (仕様 16)
+        // 6. ウィジェットサイズ変更ダイアログ
+        val resizingWidget = uiState.overlay.resizingWidgetTarget
+        if (resizingWidget != null) {
+            val useExpandedFullGrid = adaptiveSpec.isExpanded && !isDualPageMode
+            val maxCols = if (useExpandedFullGrid) {
+                uiState.settings.expandedGridColumns
+            } else {
+                uiState.settings.compactGridColumns
+            }
+            val maxRows = if (useExpandedFullGrid) {
+                uiState.settings.expandedGridRows
+            } else {
+                uiState.settings.compactGridRows
+            }
+            WidgetResizeDialog(
+                item = resizingWidget,
+                maxColumns = maxCols,
+                maxRows = maxRows,
+                onConfirmResize = { newSpanX, newSpanY ->
+                    viewModel.resizeWidgetItem(
+                        item = resizingWidget,
+                        newSpanX = newSpanX,
+                        newSpanY = newSpanY
+                    )
+                },
+                onDismiss = { viewModel.dismissResizeWidgetDialog() }
+            )
+        }
+
+        // 7. ページ管理ダイアログ (仕様 16)
         if (uiState.overlay.isPageManagerOpen) {
             PageManagerDialog(
                 userPages = uiState.userPages,
@@ -648,7 +1195,7 @@ fun LauncherScreen(
             )
         }
 
-        // 7. 未インストールアプリ Placeholder ダイアログ (仕様 25)
+        // 8. 未インストールアプリ・ウィジェット Placeholder ダイアログ (仕様 25)
         val missingTarget = uiState.overlay.missingAppDialogTarget
         if (missingTarget != null) {
             MissingAppDialog(
@@ -659,7 +1206,7 @@ fun LauncherScreen(
             )
         }
 
-        // 8. 下スワイプ通知 Accessibility オンボーディングダイアログ (仕様 7.2)
+        // 9. 下スワイプ通知 Accessibility オンボーディングダイアログ (仕様 7.2)
         if (uiState.overlay.showAccessibilityOnboardingDialog) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissAccessibilityOnboarding() },
@@ -686,7 +1233,7 @@ fun LauncherScreen(
             )
         }
 
-        // 9. JSONプレビュー・直接復元ダイアログ
+        // 10. JSONプレビュー・直接復元ダイアログ
         val jsonPreview = uiState.overlay.jsonPreviewContent
         if (jsonPreview != null) {
             JsonBackupPreviewDialog(
@@ -705,6 +1252,14 @@ private fun LauncherPageContent(
     adaptiveSpec: AdaptiveLayoutSpec,
     isHalfPaneInDualMode: Boolean,
     isSettledOnDiscover: Boolean,
+    activeDragState: CrossPageDragState?,
+    highlightedDropCell: GridPosition?,
+    editableHomePages: List<LauncherPage>,
+    onGridMetricsChanged: (HomePageGridMetrics) -> Unit,
+    onDragStartItem: (CrossPageDragState) -> Unit,
+    onDragUpdateItem: (CrossPageDragState) -> Unit,
+    onDragEndItem: (CrossPageDragState) -> Unit,
+    onDragCancelItem: () -> Unit,
     viewModel: LauncherViewModel
 ) {
     val context = LocalContext.current
@@ -841,6 +1396,7 @@ private fun LauncherPageContent(
                 isExpanded = useExpandedFullGrid,
                 isEditMode = uiState.overlay.isEditMode,
                 appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
+                widgetHostManager = viewModel.widgetHostManager,
                 onItemClick = { item, isInstalled ->
                     viewModel.onLayoutItemClicked(item, isInstalled)
                 },
@@ -851,11 +1407,34 @@ private fun LauncherPageContent(
                 onMoveItem = { item, targetPos ->
                     viewModel.moveLayoutItem(item, targetPos, useExpandedFullGrid)
                 },
+                onResizeWidgetRequest = { item ->
+                    viewModel.openResizeWidgetDialog(item)
+                },
+                onRebindWidgetRequest = { item ->
+                    viewModel.requestRebindExistingWidget(item, useExpandedFullGrid)
+                },
+                onConfigureWidgetRequest = { item ->
+                    viewModel.requestConfigureExistingWidget(item)
+                },
+                onSilentAutoRebindWidget = { item ->
+                    viewModel.trySilentAutoRebindWidget(item)
+                },
                 onDeleteItem = { item -> viewModel.deleteLayoutItem(item) },
                 onEnterEditMode = { viewModel.enterEditMode() },
                 onOpenAppInfo = { pkg -> viewModel.openAppInfo(pkg) },
                 onSwipeUp = { viewModel.onSwipeUpSearch() },
-                onSwipeDown = { viewModel.onSwipeDownNotification(context) }
+                onSwipeDown = { viewModel.onSwipeDownNotification(context) },
+                activeDragState = activeDragState,
+                highlightedDropCell = highlightedDropCell,
+                availableHomePages = editableHomePages,
+                onGridMetricsChanged = onGridMetricsChanged,
+                onDragStartItem = onDragStartItem,
+                onDragUpdateItem = onDragUpdateItem,
+                onDragEndItem = onDragEndItem,
+                onDragCancelItem = onDragCancelItem,
+                onMoveItemToAnotherPage = { item, destPageId ->
+                    viewModel.moveItemToAnotherPage(item, destPageId, useExpandedFullGrid)
+                }
             )
         }
     }
@@ -866,6 +1445,7 @@ private fun EditModeBanner(
     visible: Boolean,
     currentPage: LauncherPage,
     onAddApp: () -> Unit,
+    onAddWidget: () -> Unit,
     onManagePages: () -> Unit,
     onFinishEdit: () -> Unit
 ) {
@@ -889,11 +1469,16 @@ private fun EditModeBanner(
                     fontSize = 13.sp
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilledTonalButton(onClick = onAddApp) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("追加", fontSize = 12.sp)
+                    }
+                    FilledTonalButton(onClick = onAddWidget) {
+                        Icon(Icons.Default.Widgets, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Widget", fontSize = 12.sp)
                     }
                     FilledTonalButton(onClick = onManagePages) {
                         Icon(Icons.Default.Pages, contentDescription = null, modifier = Modifier.size(16.dp))

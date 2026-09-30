@@ -35,6 +35,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.widgetHostManager.startListening()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.widgetHostManager.stopListening()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_CONFIGURE_APPWIDGET) {
+            viewModel.onWidgetConfigureActivityResult(resultCode == RESULT_OK)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -44,5 +62,9 @@ class MainActivity : ComponentActivity() {
         ) {
             viewModel.onHomeGestureInvoked()
         }
+    }
+
+    companion object {
+        const val REQUEST_CODE_CONFIGURE_APPWIDGET = 2048
     }
 }

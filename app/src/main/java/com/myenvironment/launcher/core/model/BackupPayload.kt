@@ -37,7 +37,8 @@ data class BackupLayoutItem(
     val compact: GridPosition,
     val expanded: GridPosition? = null,
     val spanX: Int = 1,
-    val spanY: Int = 1
+    val spanY: Int = 1,
+    val appWidgetId: Int = LayoutItem.NO_WIDGET_ID
 )
 
 /**

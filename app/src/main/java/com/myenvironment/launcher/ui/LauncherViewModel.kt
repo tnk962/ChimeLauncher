@@ -1,7 +1,10 @@
 package com.myenvironment.launcher.ui
 
+import android.appwidget.AppWidgetProviderInfo
+import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -18,6 +21,7 @@ import com.myenvironment.launcher.core.model.LauncherAction
 import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.core.model.LauncherSettings
 import com.myenvironment.launcher.core.model.LayoutItem
+import com.myenvironment.launcher.core.widget.WidgetProviderCatalogItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +51,35 @@ sealed interface ItemPickerTarget {
 }
 
 /**
+ * システムの AppWidget バインド許可ダイアログや Configuration Activity を起動するためのイベント
+ */
+sealed interface WidgetSystemEvent {
+    data class RequestBindAppWidget(
+        val appWidgetId: Int,
+        val provider: ComponentName
+    ) : WidgetSystemEvent
+
+    data class RequestConfigureAppWidget(
+        val appWidgetId: Int
+    ) : WidgetSystemEvent
+}
+
+/**
+ * バインド・初期設定完了待ちのウィジェット配置リクエスト
+ */
+internal data class PendingWidgetPlacement(
+    val appWidgetId: Int,
+    val provider: ComponentName,
+    val label: String,
+    val pageId: String,
+    val preferredCell: GridPosition?,
+    val spanX: Int,
+    val spanY: Int,
+    val isExpandedMode: Boolean,
+    val existingItemId: String? = null
+)
+
+/**
  * ViewModel内のローカルUI制御状態
  */
 data class OverlayControlState(
@@ -58,6 +91,7 @@ data class OverlayControlState(
     val showLockedAlert: Boolean = false,
     val showAccessibilityOnboardingDialog: Boolean = false,
     val missingAppDialogTarget: LayoutItem? = null,
+    val resizingWidgetTarget: LayoutItem? = null,
     val itemPickerTarget: ItemPickerTarget? = null,
     val jsonPreviewContent: String? = null,
     val statusMessage: String? = null
@@ -69,6 +103,7 @@ data class OverlayControlState(
 data class LauncherUiState(
     val installedApps: List<AppInfo> = emptyList(),
     val installedPackages: Set<String> = emptySet(),
+    val availableWidgets: List<WidgetProviderCatalogItem> = emptyList(),
     val pages: List<LauncherPage> = listOf(
         LauncherPage.FIXED_DISCOVER,
         LauncherPage.FIXED_ALL_APPS,
@@ -92,14 +127,23 @@ class LauncherViewModel(
     private val layoutRepository = container.layoutRepository
     private val settingsRepository = container.settingsRepository
     private val backupManager = container.backupManager
+    val widgetHostManager = container.widgetHostManager
     val searchEngine = container.searchEngine
     val feedBridge = container.feedBridge
 
     private val overlayState = MutableStateFlow(OverlayControlState())
+    private val availableWidgetsState = MutableStateFlow<List<WidgetProviderCatalogItem>>(emptyList())
+
+    private var pendingWidgetPlacement: PendingWidgetPlacement? = null
+    private val silentRebindAttemptedItemIds = HashSet<String>()
 
     // Pagerを指定ページIDへ移動させるイベントストリーム (Home Gesture復帰等で利用: 仕様 4)
     private val _pageNavigationEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val pageNavigationEvents: SharedFlow<String> = _pageNavigationEvents.asSharedFlow()
+
+    // システムの AppWidget バインド許可 / 設定 Activity 起動イベントストリーム
+    private val _widgetSystemEvents = MutableSharedFlow<WidgetSystemEvent>(extraBufferCapacity = 4)
+    val widgetSystemEvents: SharedFlow<WidgetSystemEvent> = _widgetSystemEvents.asSharedFlow()
 
     val uiState: StateFlow<LauncherUiState> = combine(
         combine(
@@ -114,9 +158,10 @@ class LauncherViewModel(
         ) { items, dock, settings -> Triple(items, dock, settings) },
         combine(
             backupManager.savedSnapshots,
-            overlayState
-        ) { snaps, overlay -> snaps to overlay }
-    ) { (apps, pkgs, uPages), (items, dock, settings), (snaps, overlay) ->
+            overlayState,
+            availableWidgetsState
+        ) { snaps, overlay, widgets -> Triple(snaps, overlay, widgets) }
+    ) { (apps, pkgs, uPages), (items, dock, settings), (snaps, overlay, widgets) ->
         val fixedLeftAndHome = buildList {
             if (settings.discoverMode != DiscoverMode.DISABLED) {
                 add(LauncherPage.FIXED_DISCOVER)
@@ -131,6 +176,7 @@ class LauncherViewModel(
         LauncherUiState(
             installedApps = apps,
             installedPackages = pkgs,
+            availableWidgets = widgets,
             pages = allPages,
             userPages = uPages.sortedBy { it.sortOrder },
             homePageIndex = homeIdx,
@@ -150,6 +196,22 @@ class LauncherViewModel(
         viewModelScope.launch {
             layoutRepository.ensureInitialized()
         }
+        viewModelScope.launch {
+            combine(
+                appDiscovery.installedPackages,
+                settingsRepository.settings
+            ) { _, settings ->
+                settings.compactGridColumns to settings.compactGridRows
+            }.collect { (cols, rows) ->
+                val catalog = withContext(Dispatchers.IO) {
+                    widgetHostManager.loadInstalledWidgetCatalog(
+                        maxColumns = cols,
+                        maxRows = rows
+                    )
+                }
+                availableWidgetsState.value = catalog
+            }
+        }
     }
 
     /**
@@ -166,6 +228,7 @@ class LauncherViewModel(
                 showLockedAlert = false,
                 showAccessibilityOnboardingDialog = false,
                 missingAppDialogTarget = null,
+                resizingWidgetTarget = null,
                 itemPickerTarget = null,
                 jsonPreviewContent = null
             )
@@ -208,6 +271,7 @@ class LauncherViewModel(
             !ov.showLockedAlert &&
             !ov.showAccessibilityOnboardingDialog &&
             ov.missingAppDialogTarget == null &&
+            ov.resizingWidgetTarget == null &&
             ov.itemPickerTarget == null &&
             ov.jsonPreviewContent == null
     }
@@ -255,7 +319,7 @@ class LauncherViewModel(
         appLauncher.openAppDetailsSettings(packageName)
     }
 
-    // --- アプリ / Shortcut / Action / Placeholder 起動 (仕様 12, 24, 25) ---
+    // --- アプリ / Shortcut / Action / Widget / Placeholder 起動 (仕様 12, 24, 25, 30) ---
     fun onLayoutItemClicked(item: LayoutItem, isInstalled: Boolean) {
         when (item.type) {
             ItemType.APP -> {
@@ -267,6 +331,11 @@ class LauncherViewModel(
                     if (!launched) {
                         overlayState.update { it.copy(missingAppDialogTarget = item) }
                     }
+                }
+            }
+            ItemType.WIDGET -> {
+                if (!isInstalled) {
+                    overlayState.update { it.copy(missingAppDialogTarget = item) }
                 }
             }
             ItemType.SHORTCUT -> {
@@ -283,7 +352,7 @@ class LauncherViewModel(
 
     fun onDockItemClicked(item: DockItem, isInstalled: Boolean) {
         when (item.type) {
-            ItemType.APP -> {
+            ItemType.APP, ItemType.WIDGET -> {
                 if (!isInstalled) {
                     overlayState.update {
                         it.copy(
@@ -387,7 +456,7 @@ class LauncherViewModel(
         _pageNavigationEvents.tryEmit(LauncherPage.PAGE_ID_HOME)
     }
 
-    // --- アイテム追加・移動・削除 (仕様 11, 13, 14, 20) ---
+    // --- アイテム追加・移動・削除 (仕様 11, 13, 14, 20, 30) ---
     fun requestAddItemToPage(
         page: LauncherPage,
         preferredCell: GridPosition? = null,
@@ -529,6 +598,276 @@ class LauncherViewModel(
         }
     }
 
+    // --- AppWidget 追加・バインド・設定・リサイズ制御 (仕様 30) ---
+    fun addWidgetFromPicker(
+        widget: WidgetProviderCatalogItem,
+        isExpandedMode: Boolean
+    ) = runIfUnlocked {
+        val target = overlayState.value.itemPickerTarget as? ItemPickerTarget.HomePageCell
+            ?: ItemPickerTarget.HomePageCell(
+                pageId = LauncherPage.PAGE_ID_HOME,
+                pageName = "HOME"
+            )
+
+        // 先に前回の未完了バインドがあれば解放
+        pendingWidgetPlacement?.let { stale ->
+            if (stale.existingItemId == null && stale.appWidgetId > 0) {
+                widgetHostManager.deleteAppWidgetId(stale.appWidgetId)
+            }
+        }
+
+        val appWidgetId = widgetHostManager.allocateAppWidgetId()
+        if (appWidgetId <= 0) {
+            overlayState.update {
+                it.copy(statusMessage = "ウィジェットIDの割り当てに失敗しました")
+            }
+            return@runIfUnlocked
+        }
+
+        val pending = PendingWidgetPlacement(
+            appWidgetId = appWidgetId,
+            provider = widget.provider,
+            label = widget.widgetLabel,
+            pageId = target.pageId,
+            preferredCell = target.preferredCell,
+            spanX = widget.defaultSpanX,
+            spanY = widget.defaultSpanY,
+            isExpandedMode = isExpandedMode,
+            existingItemId = null
+        )
+        pendingWidgetPlacement = pending
+
+        val boundImmediately = widgetHostManager.tryBindAppWidget(appWidgetId, widget.provider)
+        if (boundImmediately) {
+            proceedAfterWidgetBound(pending)
+        } else {
+            _widgetSystemEvents.tryEmit(
+                WidgetSystemEvent.RequestBindAppWidget(
+                    appWidgetId = appWidgetId,
+                    provider = widget.provider
+                )
+            )
+        }
+    }
+
+    /**
+     * バックアップ復元後などで未バインド状態のウィジェットをユーザーがタップした際、再バインドを実行する。
+     */
+    fun requestRebindExistingWidget(
+        item: LayoutItem,
+        isExpandedMode: Boolean
+    ) {
+        val providerInfo = widgetHostManager.findProviderInfo(item.packageName, item.activityName)
+        if (providerInfo == null) {
+            overlayState.update { it.copy(missingAppDialogTarget = item) }
+            return
+        }
+
+        val newWidgetId = widgetHostManager.allocateAppWidgetId()
+        if (newWidgetId <= 0) return
+
+        val pending = PendingWidgetPlacement(
+            appWidgetId = newWidgetId,
+            provider = providerInfo.provider,
+            label = item.label,
+            pageId = item.pageId,
+            preferredCell = item.compact,
+            spanX = item.spanX,
+            spanY = item.spanY,
+            isExpandedMode = isExpandedMode,
+            existingItemId = item.id
+        )
+        pendingWidgetPlacement = pending
+
+        val boundImmediately = widgetHostManager.tryBindAppWidget(newWidgetId, providerInfo.provider)
+        if (boundImmediately) {
+            proceedAfterWidgetBound(pending)
+        } else {
+            _widgetSystemEvents.tryEmit(
+                WidgetSystemEvent.RequestBindAppWidget(
+                    appWidgetId = newWidgetId,
+                    provider = providerInfo.provider
+                )
+            )
+        }
+    }
+
+    /**
+     * バックアップ復元直後などに、システム許可なしでサイレント再バインド可能か1度だけ試行する。
+     */
+    fun trySilentAutoRebindWidget(item: LayoutItem) {
+        if (!silentRebindAttemptedItemIds.add(item.id)) return
+        viewModelScope.launch {
+            val providerInfo = withContext(Dispatchers.IO) {
+                widgetHostManager.findProviderInfo(item.packageName, item.activityName)
+            } ?: return@launch
+
+            val candidateId = widgetHostManager.allocateAppWidgetId()
+            if (candidateId <= 0) return@launch
+
+            val bound = widgetHostManager.tryBindAppWidget(candidateId, providerInfo.provider)
+            if (bound) {
+                if (item.appWidgetId > 0 && item.appWidgetId != candidateId) {
+                    widgetHostManager.deleteAppWidgetId(item.appWidgetId)
+                }
+                layoutRepository.updateWidgetId(item.id, candidateId)
+            } else {
+                widgetHostManager.deleteAppWidgetId(candidateId)
+            }
+        }
+    }
+
+    /**
+     * 配置済みウィジェットのコンテキストメニューから「⚙️ ウィジェットの設定」を開く。
+     */
+    fun requestConfigureExistingWidget(item: LayoutItem) {
+        if (item.appWidgetId <= 0) return
+        val info = widgetHostManager.getAppWidgetInfo(item.appWidgetId) ?: return
+        if (info.configure != null) {
+            pendingWidgetPlacement = null
+            _widgetSystemEvents.tryEmit(
+                WidgetSystemEvent.RequestConfigureAppWidget(item.appWidgetId)
+            )
+        }
+    }
+
+    /**
+     * システムの `ACTION_APPWIDGET_BIND` ダイアログ結果を受け取る。
+     */
+    fun onWidgetBindActivityResult(granted: Boolean) {
+        val pending = pendingWidgetPlacement ?: return
+        if (granted) {
+            proceedAfterWidgetBound(pending)
+        } else {
+            widgetHostManager.deleteAppWidgetId(pending.appWidgetId)
+            pendingWidgetPlacement = null
+        }
+    }
+
+    private fun proceedAfterWidgetBound(pending: PendingWidgetPlacement) {
+        val info = widgetHostManager.getAppWidgetInfo(pending.appWidgetId)
+        val needsConfigure = pending.existingItemId == null &&
+            info?.configure != null &&
+            !isConfigurationOptional(info)
+
+        if (needsConfigure) {
+            _widgetSystemEvents.tryEmit(
+                WidgetSystemEvent.RequestConfigureAppWidget(pending.appWidgetId)
+            )
+        } else {
+            commitPendingWidget(pending)
+        }
+    }
+
+    /**
+     * ウィジェットの Configuration Activity 完了結果を受け取る。
+     */
+    fun onWidgetConfigureActivityResult(success: Boolean) {
+        val pending = pendingWidgetPlacement ?: return
+        if (success) {
+            commitPendingWidget(pending)
+        } else {
+            widgetHostManager.deleteAppWidgetId(pending.appWidgetId)
+            pendingWidgetPlacement = null
+        }
+    }
+
+    private fun commitPendingWidget(pending: PendingWidgetPlacement) {
+        pendingWidgetPlacement = null
+        viewModelScope.launch {
+            if (pending.existingItemId != null) {
+                layoutRepository.updateWidgetId(pending.existingItemId, pending.appWidgetId)
+                return@launch
+            }
+
+            val state = uiState.value
+            val cols = if (pending.isExpandedMode) {
+                state.settings.expandedGridColumns
+            } else {
+                state.settings.compactGridColumns
+            }.coerceAtLeast(3)
+            val rows = if (pending.isExpandedMode) {
+                state.settings.expandedGridRows
+            } else {
+                state.settings.compactGridRows
+            }.coerceAtLeast(3)
+
+            val pageItems = state.layoutItems.filter { it.pageId == pending.pageId }
+            val (assignedPos, assignedSpan) = findBestGridPlacementForSpan(
+                existingItems = pageItems,
+                requestedSpanX = pending.spanX,
+                requestedSpanY = pending.spanY,
+                preferredCell = pending.preferredCell,
+                isExpandedMode = pending.isExpandedMode,
+                columns = cols,
+                rows = rows
+            )
+
+            val newItem = LayoutItem(
+                id = UUID.randomUUID().toString(),
+                pageId = pending.pageId,
+                type = ItemType.WIDGET,
+                packageName = pending.provider.packageName,
+                activityName = pending.provider.className,
+                label = pending.label,
+                compact = assignedPos,
+                expanded = if (pending.isExpandedMode) assignedPos else null,
+                spanX = assignedSpan.first,
+                spanY = assignedSpan.second,
+                appWidgetId = pending.appWidgetId
+            )
+            layoutRepository.upsertLayoutItem(newItem)
+            _pageNavigationEvents.tryEmit(pending.pageId)
+        }
+    }
+
+    private fun isConfigurationOptional(info: AppWidgetProviderInfo): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val features = info.widgetFeatures
+        return (features and AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL) != 0 &&
+            (features and AppWidgetProviderInfo.WIDGET_FEATURE_RECONFIGURABLE) != 0
+    }
+
+    fun openResizeWidgetDialog(item: LayoutItem) = runIfUnlocked {
+        overlayState.update { it.copy(resizingWidgetTarget = item) }
+    }
+
+    fun dismissResizeWidgetDialog() {
+        overlayState.update { it.copy(resizingWidgetTarget = null) }
+    }
+
+    fun resizeWidgetItem(item: LayoutItem, newSpanX: Int, newSpanY: Int) = runIfUnlocked {
+        viewModelScope.launch {
+            val settings = uiState.value.settings
+            val compactCols = settings.compactGridColumns.coerceAtLeast(3)
+            val compactRows = settings.compactGridRows.coerceAtLeast(3)
+            val expandedCols = settings.expandedGridColumns.coerceAtLeast(3)
+            val expandedRows = settings.expandedGridRows.coerceAtLeast(3)
+
+            val safeSpanX = newSpanX.coerceAtLeast(1)
+            val safeSpanY = newSpanY.coerceAtLeast(1)
+
+            val clampedCompact = GridPosition(
+                x = item.compact.x.coerceIn(0, (compactCols - safeSpanX.coerceAtMost(compactCols)).coerceAtLeast(0)),
+                y = item.compact.y.coerceIn(0, (compactRows - safeSpanY.coerceAtMost(compactRows)).coerceAtLeast(0))
+            )
+            val clampedExpanded = item.expanded?.let { exp ->
+                GridPosition(
+                    x = exp.x.coerceIn(0, (expandedCols - safeSpanX.coerceAtMost(expandedCols)).coerceAtLeast(0)),
+                    y = exp.y.coerceIn(0, (expandedRows - safeSpanY.coerceAtMost(expandedRows)).coerceAtLeast(0))
+                )
+            }
+
+            layoutRepository.updateItemSpan(
+                itemId = item.id,
+                spanX = safeSpanX,
+                spanY = safeSpanY,
+                adjustedCompactPosition = clampedCompact,
+                adjustedExpandedPosition = clampedExpanded
+            )
+        }
+    }
+
     fun quickAddAppToHome(app: AppInfo, isExpandedMode: Boolean, context: Context) = runIfUnlocked {
         viewModelScope.launch {
             val pos = findFirstAvailableCell(LauncherPage.PAGE_ID_HOME, isExpandedMode)
@@ -563,23 +902,105 @@ class LauncherViewModel(
         }
     }
 
-    fun moveLayoutItem(item: LayoutItem, newPosition: GridPosition, isExpandedMode: Boolean) = runIfUnlocked {
+    fun moveLayoutItem(
+        item: LayoutItem,
+        newPosition: GridPosition,
+        isExpandedMode: Boolean,
+        targetPageId: String = item.pageId
+    ) = runIfUnlocked {
         viewModelScope.launch {
             val state = uiState.value
             val cols = if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns
             val rows = if (isExpandedMode) state.settings.expandedGridRows else state.settings.compactGridRows
-            val currentPos = item.resolvePosition(isExpandedMode, cols, rows)
+            val currentPos = item.resolveClampedPosition(isExpandedMode, cols, rows)
 
-            // 移動先セルに既に別アイテムがある場合は位置をスワップする
-            val occupyingItem = state.layoutItems
-                .filter { it.pageId == item.pageId && it.id != item.id }
-                .find { it.resolvePosition(isExpandedMode, cols, rows) == newPosition }
+            val spanX = item.resolveSpanX(cols)
+            val spanY = item.resolveSpanY(rows)
+            val clampedTarget = GridPosition(
+                x = newPosition.x.coerceIn(0, (cols - spanX).coerceAtLeast(0)),
+                y = newPosition.y.coerceIn(0, (rows - spanY).coerceAtLeast(0))
+            )
 
-            if (occupyingItem != null) {
-                layoutRepository.updateItemPosition(occupyingItem.id, currentPos, isExpandedMode)
+            if (targetPageId == item.pageId) {
+                // 同一ページ内の移動：1×1 アイテム同士で移動先セルに別の 1×1 アイテムがある場合は位置をスワップ
+                if (spanX == 1 && spanY == 1) {
+                    val occupyingItem = state.layoutItems
+                        .filter { it.pageId == item.pageId && it.id != item.id && it.spanX == 1 && it.spanY == 1 }
+                        .find { it.resolveClampedPosition(isExpandedMode, cols, rows) == clampedTarget }
+
+                    if (occupyingItem != null) {
+                        layoutRepository.updateItemPosition(occupyingItem.id, currentPos, isExpandedMode)
+                    }
+                }
+                layoutRepository.updateItemPosition(item.id, clampedTarget, isExpandedMode)
+            } else {
+                // ページを跨いだ移動：移動先ページでドロップ位置または周辺の最適なセルに配置
+                val targetPageItems = state.layoutItems.filter { it.pageId == targetPageId && it.id != item.id }
+                val (assignedPos, _) = findBestGridPlacementForSpan(
+                    existingItems = targetPageItems,
+                    requestedSpanX = spanX,
+                    requestedSpanY = spanY,
+                    preferredCell = clampedTarget,
+                    isExpandedMode = isExpandedMode,
+                    columns = cols,
+                    rows = rows
+                )
+                layoutRepository.updateItemPageAndPosition(
+                    itemId = item.id,
+                    targetPageId = targetPageId,
+                    newPosition = assignedPos,
+                    isExpandedMode = isExpandedMode
+                )
             }
-            layoutRepository.updateItemPosition(item.id, newPosition, isExpandedMode)
         }
+    }
+
+    /**
+     * コンテキストメニュー等から指定ページ（または新規ページ）へアイテム・ウィジェットを移動し、そのページへジャンプする。
+     */
+    fun moveItemToAnotherPage(
+        item: LayoutItem,
+        targetPageId: String?,
+        isExpandedMode: Boolean
+    ) = runIfUnlocked {
+        viewModelScope.launch {
+            val destinationPageId = if (targetPageId.isNullOrBlank()) {
+                layoutRepository.addUserPage("").id
+            } else {
+                targetPageId
+            }
+            val state = uiState.value
+            val cols = if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns
+            val rows = if (isExpandedMode) state.settings.expandedGridRows else state.settings.compactGridRows
+            val spanX = item.resolveSpanX(cols)
+            val spanY = item.resolveSpanY(rows)
+            val currentPos = item.resolveClampedPosition(isExpandedMode, cols, rows)
+            val targetPageItems = state.layoutItems.filter { it.pageId == destinationPageId && it.id != item.id }
+            val (assignedPos, _) = findBestGridPlacementForSpan(
+                existingItems = targetPageItems,
+                requestedSpanX = spanX,
+                requestedSpanY = spanY,
+                preferredCell = currentPos,
+                isExpandedMode = isExpandedMode,
+                columns = cols,
+                rows = rows
+            )
+            layoutRepository.updateItemPageAndPosition(
+                itemId = item.id,
+                targetPageId = destinationPageId,
+                newPosition = assignedPos,
+                isExpandedMode = isExpandedMode
+            )
+            _pageNavigationEvents.tryEmit(destinationPageId)
+        }
+    }
+
+    /**
+     * ドラッグ中に右端の最終ホームページからさらに右へ移動しようとした際、新しいユーザーページを即座に作成する。
+     */
+    suspend fun createUserPageForDrag(): LauncherPage? {
+        if (uiState.value.settings.layoutLocked) return null
+        return layoutRepository.addUserPage("")
     }
 
     fun deleteLayoutItem(item: LayoutItem) = runIfUnlocked {
@@ -587,6 +1008,9 @@ class LauncherViewModel(
             if (item.pageId == "dock") {
                 layoutRepository.deleteDockItem(item.id)
             } else {
+                if (item.type == ItemType.WIDGET && item.appWidgetId > 0) {
+                    widgetHostManager.deleteAppWidgetId(item.appWidgetId)
+                }
                 layoutRepository.deleteLayoutItem(item.id)
             }
         }
@@ -636,6 +1060,10 @@ class LauncherViewModel(
 
     fun deleteUserPage(pageId: String) = runIfUnlocked {
         viewModelScope.launch {
+            // 削除対象ページ内の AppWidget ID も解放する
+            uiState.value.layoutItems
+                .filter { it.pageId == pageId && it.type == ItemType.WIDGET && it.appWidgetId > 0 }
+                .forEach { widgetHostManager.deleteAppWidgetId(it.appWidgetId) }
             layoutRepository.deleteUserPage(pageId)
         }
     }
@@ -728,6 +1156,7 @@ class LauncherViewModel(
 
     fun restoreSnapshot(snapshotId: Long) {
         viewModelScope.launch {
+            silentRebindAttemptedItemIds.clear()
             val result = backupManager.restoreInternalSnapshot(snapshotId)
             overlayState.update {
                 it.copy(
@@ -769,6 +1198,7 @@ class LauncherViewModel(
 
     fun importBackupFromUri(context: Context, uri: Uri) {
         viewModelScope.launch {
+            silentRebindAttemptedItemIds.clear()
             val result = runCatching {
                 val (bytes, displayName) = withContext(Dispatchers.IO) {
                     val fileBytes = context.contentResolver.openInputStream(uri)?.use {
@@ -828,6 +1258,7 @@ class LauncherViewModel(
 
     fun restoreFromRawJson(jsonText: String) {
         viewModelScope.launch {
+            silentRebindAttemptedItemIds.clear()
             val result = backupManager.restoreFromJsonString(jsonText)
             overlayState.update {
                 it.copy(
@@ -866,25 +1297,102 @@ class LauncherViewModel(
 
     private fun findFirstAvailableCell(pageId: String, isExpandedMode: Boolean): GridPosition {
         val state = uiState.value
-        val cols = if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns
-        val rows = if (isExpandedMode) state.settings.expandedGridRows else state.settings.compactGridRows
-        val occupied = state.layoutItems
-            .filter { it.pageId == pageId }
-            .map { it.resolvePosition(isExpandedMode, cols, rows) }
-            .toSet()
-
-        for (y in 0 until rows) {
-            for (x in 0 until cols) {
-                val candidate = GridPosition(x, y)
-                if (!occupied.contains(candidate)) {
-                    return candidate
-                }
-            }
-        }
-        return GridPosition(0, 0)
+        val cols = (if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns).coerceAtLeast(3)
+        val rows = (if (isExpandedMode) state.settings.expandedGridRows else state.settings.compactGridRows).coerceAtLeast(3)
+        val pageItems = state.layoutItems.filter { it.pageId == pageId }
+        return findBestGridPlacementForSpan(
+            existingItems = pageItems,
+            requestedSpanX = 1,
+            requestedSpanY = 1,
+            preferredCell = null,
+            isExpandedMode = isExpandedMode,
+            columns = cols,
+            rows = rows
+        ).first
     }
 
     companion object {
+        /**
+         * 指定されたセル幅・高さ (`requestedSpanX` × `requestedSpanY`) が既存アイテムと重ならず配置できる
+         * 最適な左上座標と有効スパン `(GridPosition, Pair<spanX, spanY>)` を返す。
+         */
+        internal fun findBestGridPlacementForSpan(
+            existingItems: List<LayoutItem>,
+            requestedSpanX: Int,
+            requestedSpanY: Int,
+            preferredCell: GridPosition?,
+            isExpandedMode: Boolean,
+            columns: Int,
+            rows: Int
+        ): Pair<GridPosition, Pair<Int, Int>> {
+            val safeCols = columns.coerceAtLeast(1)
+            val safeRows = rows.coerceAtLeast(1)
+            val targetW = requestedSpanX.coerceIn(1, safeCols)
+            val targetH = requestedSpanY.coerceIn(1, safeRows)
+
+            val occupied = HashSet<GridPosition>()
+            existingItems.forEach { item ->
+                occupied.addAll(item.occupiedCells(isExpandedMode, safeCols, safeRows))
+            }
+
+            fun canFitAt(startX: Int, startY: Int, w: Int, h: Int): Boolean {
+                if (startX < 0 || startY < 0 || startX + w > safeCols || startY + h > safeRows) {
+                    return false
+                }
+                for (dy in 0 until h) {
+                    for (dx in 0 until w) {
+                        if (occupied.contains(GridPosition(startX + dx, startY + dy))) {
+                            return false
+                        }
+                    }
+                }
+                return true
+            }
+
+            // 1. ユーザーが空白セルを指定していた場合、そのセルを左上にして収まるか確認
+            if (preferredCell != null) {
+                val clampedX = preferredCell.x.coerceIn(0, (safeCols - targetW).coerceAtLeast(0))
+                val clampedY = preferredCell.y.coerceIn(0, (safeRows - targetH).coerceAtLeast(0))
+                if (canFitAt(clampedX, clampedY, targetW, targetH)) {
+                    return GridPosition(clampedX, clampedY) to (targetW to targetH)
+                }
+            }
+
+            // 2. 要求された (targetW × targetH) がそのまま収まる空き領域を探索
+            for (y in 0..(safeRows - targetH)) {
+                for (x in 0..(safeCols - targetW)) {
+                    if (canFitAt(x, y, targetW, targetH)) {
+                        return GridPosition(x, y) to (targetW to targetH)
+                    }
+                }
+            }
+
+            // 3. 要求サイズで空きがない場合、段階的にサイズを縮小して既存アイテムと重ならない最大領域を探す
+            for (h in targetH downTo 1) {
+                for (w in targetW downTo 1) {
+                    if (preferredCell != null && canFitAt(preferredCell.x, preferredCell.y, w, h)) {
+                        return preferredCell to (w to h)
+                    }
+                    for (y in 0..(safeRows - h)) {
+                        for (x in 0..(safeCols - w)) {
+                            if (canFitAt(x, y, w, h)) {
+                                return GridPosition(x, y) to (w to h)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. 全セルが埋まっている場合のフォールバック
+            val fallbackPos = preferredCell?.let {
+                GridPosition(
+                    x = it.x.coerceIn(0, (safeCols - targetW).coerceAtLeast(0)),
+                    y = it.y.coerceIn(0, (safeRows - targetH).coerceAtLeast(0))
+                )
+            } ?: GridPosition(0, 0)
+            return fallbackPos to (targetW to targetH)
+        }
+
         fun provideFactory(container: AppContainer): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

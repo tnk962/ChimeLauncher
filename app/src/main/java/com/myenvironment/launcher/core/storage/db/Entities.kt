@@ -45,7 +45,8 @@ data class LayoutItemEntity(
     val expandedX: Int?,
     val expandedY: Int?,
     val spanX: Int,
-    val spanY: Int
+    val spanY: Int,
+    val appWidgetId: Int = LayoutItem.NO_WIDGET_ID
 ) {
     fun toDomain(): LayoutItem = LayoutItem(
         id = id,
@@ -62,7 +63,8 @@ data class LayoutItemEntity(
             null
         },
         spanX = spanX,
-        spanY = spanY
+        spanY = spanY,
+        appWidgetId = appWidgetId
     )
 
     companion object {
@@ -79,7 +81,8 @@ data class LayoutItemEntity(
             expandedX = item.expanded?.x,
             expandedY = item.expanded?.y,
             spanX = item.spanX,
-            spanY = item.spanY
+            spanY = item.spanY,
+            appWidgetId = item.appWidgetId
         )
     }
 }

@@ -17,6 +17,7 @@ import com.myenvironment.launcher.core.storage.LayoutRepository
 import com.myenvironment.launcher.core.storage.RoomLayoutRepository
 import com.myenvironment.launcher.core.storage.SettingsRepository
 import com.myenvironment.launcher.core.storage.db.LauncherDatabase
+import com.myenvironment.launcher.core.widget.WidgetHostManager
 
 /**
  * アプリ全体の依存オブジェクトを保持する軽量DIコンテナ (仕様 40, 41)
@@ -33,6 +34,9 @@ class AppContainer(context: Context) {
 
     val appLauncher: AppLauncher =
         AndroidAppLauncher(appContext)
+
+    val widgetHostManager: WidgetHostManager =
+        WidgetHostManager(appContext)
 
     private val dataStoreSettingsRepository =
         DataStoreSettingsRepository(appContext)

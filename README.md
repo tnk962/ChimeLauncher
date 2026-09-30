@@ -1,4 +1,4 @@
-# My Launcher (v0.1 MVP)
+# My Launcher (v0.6.0)
 
 Galaxy Z Fold系およびPixel系を主要ターゲットとした、自分専用の軽量・高速 Android Launcher です。
 詳細な仕様は [SPECIFICATION.md](file:///Users/yohei/projects/TodoActions/AndroidLauncher/SPECIFICATION.md) を参照してください。
@@ -14,17 +14,20 @@ Galaxy Z Fold系およびPixel系を主要ターゲットとした、自分専�
 2. **All Apps / Tiny Icons ページ (`Page -1`)**
    - HOME の1つ左のページに、インストール済みアプリを小型アイコンで高密度に一覧表示します。
    - 列数・アイコンサイズ・アプリ名ラベルの ON/OFF をヘッダーメニューまたは設定画面から即座に切り替え可能です。
-3. **Adaptive Fold UI (`Bottom Dock` ↔ `Right Dock`)**
-   - `WindowWidthSizeClass` に基づき、Fold を閉じた状態（Compact）では **下部 Dock**、Fold を開いた状態（Expanded）では **右端 Dock** に自動適応します。
-   - アイコン配置は `compactPosition` と `expandedPosition` を保持でき、未設定時は自動変換されます。
-4. **誤操作防止（編集モード分離 & レイアウトロック）**
-   - 通常時はドラッグ移動を無効化し、編集モードでのみ移動・削除・ページ追加を行えます。
+3. **Adaptive Fold UI (`Bottom Dock` ↔ `Right Dock` & 左右2ページ見開き)**
+   - `WindowWidthSizeClass` に基づき、Fold を閉じた状態（Compact）では **下部 Dock + 1ページ表示**、Fold を開いた状態（Expanded）では **右端 Dock + 左右2ページ見開き表示 (`DUAL_PAGE`)**（Discover と 設定ページは1ページ全画面固定）または **1ページ全画面表示 (`SINGLE_FULL`)** に自動適応します。
+   - アイコン・ウィジェット配置は `compactPosition` と `expandedPosition` を保持でき、未設定時は自動変換されます。
+4. **ホーム画面 AppWidget 対応（配置・リサイズ・ドラッグ移動・再バインド）**
+   - `AppWidgetHost` (`WidgetHostManager`) により、Google カレンダーや時計・天気など任意の Android ウィジェットを HOME および追加ページへ自由配置できます。
+   - マルチセル（`spanX × spanY`）占有計算、ドラッグ移動、`WidgetResizeDialog` によるサイズ変更、バックアップ復元後のワンタップ再バインドに対応しています。
+5. **誤操作防止（編集モード分離 & レイアウトロック）**
+   - 通常時はドラッグ移動を無効化し、編集モードでのみ移動・リサイズ・削除・ページ追加を行えます。
    - **レイアウトロック** ON 時は一切の変更操作をブロックし、`🔒 ホーム画面はロックされています [キャンセル] [ロック解除]` ダイアログを表示します。
-5. **下スワイプで通知シェード展開**
-   - ホーム画面中央から **下スワイプ** すると、`NotificationShadeService` (`AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS`) を介して Android 標準の通知シェードを開きます。
-6. **JSON バックアップ / 復元 & 未インストール Placeholder**
-   - Room + DataStore に永続化されたレイアウト・Dock・設定を `kotlinx.serialization` で JSON へシリアライズし、アプリ内スナップショット保存または外部 `.json` ファイルへ Export / Import できます。
-   - アンインストールされたアプリや復元時に未導入のアプリは自動削除せず、`? / アプリ名 / 未インストール` の **Placeholder** として位置を保持します。タップすると Play ストアを開け、再インストール時には `LauncherApps.Callback` により自動的に通常アイコンへ復元されます。
+6. **下スワイプで通知シェード展開**
+   - ホーム画面中央から **下スワイプ** すると、`StatusBarManager` リフレクションまたは `NotificationShadeService` (`AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS`) を介して Android 標準の通知シェードを開きます。
+7. **JSON / Nova バックアップ・復元 & 未インストール Placeholder**
+   - Room + DataStore に永続化されたレイアウト・ウィジェット・Dock・設定を `kotlinx.serialization` で JSON へシリアライズし、アプリ内スナップショット保存または外部 `.json` / `.novabackup` ファイルからインポートできます。
+   - アンインストールされたアプリ・ウィジェットは自動削除せず、`? / 名前 / 未インストール` の **Placeholder** として位置とサイズを保持します。
 
 ---
 
@@ -32,28 +35,29 @@ Galaxy Z Fold系およびPixel系を主要ターゲットとした、自分専�
 
 ```text
 app/src/main/java/com/myenvironment/launcher/
-├── MainActivity.kt                  # CATEGORY_HOME, singleTask, onNewIntentでのHOME復帰
+├── MainActivity.kt                  # CATEGORY_HOME, singleTask, AppWidgetHost lifecycle & Configure result
 ├── LauncherApplication.kt           # AppContainer (軽量DIコンテナ)
 ├── accessibility/
 │   └── NotificationShadeService.kt  # GLOBAL_ACTION_NOTIFICATIONS による通知シェード展開
 ├── core/
-│   ├── model/                       # AppInfo, LauncherPage, LayoutItem, DockItem, LauncherAction, LauncherSettings, BackupPayload
+│   ├── model/                       # AppInfo, LauncherPage, LayoutItem (WIDGET対応), DockItem, LauncherSettings, BackupPayload
 │   ├── launcher/                    # [Interface] AppDiscoveryRepository, AppLauncher & 実装
-│   ├── storage/                     # [Interface] LayoutRepository, SettingsRepository & Room/DataStore実装
+│   ├── widget/                      # WidgetHostManager, LauncherAppWidgetHost, LauncherAppWidgetHostView
+│   ├── storage/                     # [Interface] LayoutRepository, SettingsRepository & Room (v2) / DataStore実装
 │   ├── search/                      # [Interface] SearchEngine & DefaultSearchEngine
-│   ├── backup/                      # [Interface] BackupManager & JsonBackupManager
-│   └── feed/                        # [Interface] FeedBridge & DefaultFeedBridge
+│   ├── backup/                      # [Interface] BackupManager & JsonBackupManager, NovaBackupConverter
+│   └── feed/                        # [Interface] FeedBridge & DefaultFeedBridge (6ジャンル RSS/Atom/OGP)
 └── ui/
-    ├── LauncherScreen.kt            # HorizontalPager + Adaptive Dock + Overlays
-    ├── LauncherViewModel.kt         # UDF 状態管理
+    ├── LauncherScreen.kt            # HorizontalPager (Single / DualSpread) + Adaptive Dock + Overlays
+    ├── LauncherViewModel.kt         # UDF 状態管理 & AppWidget バインド・リサイズ制御
     ├── adaptive/                    # AdaptiveLayoutSpec (Compact / Expanded 判定)
     ├── components/                  # AppIconView (Placeholder対応), GestureContainer
-    ├── discover/                    # Page -2: DiscoverPage
+    ├── discover/                    # Page -2: DiscoverPage (左端スワイプでGoogle App起動対応)
     ├── allapps/                     # Page -1: AllAppsTinyPage
-    ├── home/                        # Page 0..N: HomeGridPage, MissingAppDialog
+    ├── home/                        # Page 0..N: HomeGridPage, WidgetItemView, MissingAppDialog
     ├── dock/                        # AdaptiveDock (Bottom / Right)
     ├── search/                      # SearchOverlay
-    ├── editor/                      # HomeEditSheet, LockedAlertDialog, ItemPickerDialog, PageManagerDialog
+    ├── editor/                      # HomeEditSheet, LockedAlertDialog, ItemPickerDialog, WidgetResizeDialog, PageManagerDialog
     └── settings/                    # SettingsScreen & Backup/Restore UI
 ```
 
