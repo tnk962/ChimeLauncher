@@ -1,72 +1,83 @@
-# My Launcher (v0.6.0)
+# Chime Launcher (v1.0.0)
 
-Galaxy Z Fold系およびPixel系を主要ターゲットとした、自分専用の軽量・高速 Android Launcher です。
-詳細な仕様は [SPECIFICATION.md](file:///Users/yohei/projects/TodoActions/AndroidLauncher/SPECIFICATION.md) を参照してください。
+> **Chimeは通知しない。気づかせる。**  
+> *Chime Moments are ambient, not interruptive.*
 
----
-
-## 主な特徴
-
-1. **Google検索バーの完全排除 & Swipe Up Search**
-   - ホーム画面上に固定の検索バーは一切配置しません。
-   - ホーム画面の空白部分を **上スワイプ** すると即座に `SearchOverlay` が開き、ソフトキーボードが自動起動します。
-   - `1. インストール済みアプリ` → `2. ショートカット` → `3. Launcher Action` → `4. Google Web検索` の優先順で高速検索できます。
-2. **All Apps / Tiny Icons ページ (`Page -1`)**
-   - HOME の1つ左のページに、インストール済みアプリを小型アイコンで高密度に一覧表示します。
-   - 列数・アイコンサイズ・アプリ名ラベルの ON/OFF をヘッダーメニューまたは設定画面から即座に切り替え可能です。
-3. **Adaptive Fold UI (`Bottom Dock` ↔ `Right Dock` & 左右2ページ見開き)**
-   - `WindowWidthSizeClass` に基づき、Fold を閉じた状態（Compact）では **下部 Dock + 1ページ表示**、Fold を開いた状態（Expanded）では **右端 Dock + 左右2ページ見開き表示 (`DUAL_PAGE`)**（Discover と 設定ページは1ページ全画面固定）または **1ページ全画面表示 (`SINGLE_FULL`)** に自動適応します。
-   - アイコン・ウィジェット配置は `compactPosition` と `expandedPosition` を保持でき、未設定時は自動変換されます。
-4. **ホーム画面 AppWidget 対応（配置・リサイズ・ドラッグ移動・再バインド）**
-   - `AppWidgetHost` (`WidgetHostManager`) により、Google カレンダーや時計・天気など任意の Android ウィジェットを HOME および追加ページへ自由配置できます。
-   - マルチセル（`spanX × spanY`）占有計算、ドラッグ移動、`WidgetResizeDialog` によるサイズ変更、バックアップ復元後のワンタップ再バインドに対応しています。
-5. **誤操作防止（編集モード分離 & レイアウトロック）**
-   - 通常時はドラッグ移動を無効化し、編集モードでのみ移動・リサイズ・削除・ページ追加を行えます。
-   - **レイアウトロック** ON 時は一切の変更操作をブロックし、`🔒 ホーム画面はロックされています [キャンセル] [ロック解除]` ダイアログを表示します。
-6. **下スワイプで通知シェード展開**
-   - ホーム画面中央から **下スワイプ** すると、`StatusBarManager` リフレクションまたは `NotificationShadeService` (`AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS`) を介して Android 標準の通知シェードを開きます。
-7. **JSON / Nova バックアップ・復元 & 未インストール Placeholder**
-   - Room + DataStore に永続化されたレイアウト・ウィジェット・Dock・設定を `kotlinx.serialization` で JSON へシリアライズし、アプリ内スナップショット保存または外部 `.json` / `.novabackup` ファイルからインポートできます。
-   - アンインストールされたアプリ・ウィジェットは自動削除せず、`? / 名前 / 未インストール` の **Placeholder** として位置とサイズを保持します。
+**Chime Launcher** は、Pixel 系および Galaxy Z Fold 等の折りたたみ端末（Foldable）に最適化された、静かで高速な Android ホームランチャーです。
 
 ---
 
-## プロジェクト構成 (`:app` Single Module + 明確なInterface境界)
+## 📱 APK のダウンロード・インストール方法（友だち・テスター向け）
 
-```text
-app/src/main/java/com/myenvironment/launcher/
-├── MainActivity.kt                  # CATEGORY_HOME, singleTask, AppWidgetHost lifecycle & Configure result
-├── LauncherApplication.kt           # AppContainer (軽量DIコンテナ)
-├── accessibility/
-│   └── NotificationShadeService.kt  # GLOBAL_ACTION_NOTIFICATIONS による通知シェード展開
-├── core/
-│   ├── model/                       # AppInfo, LauncherPage, LayoutItem (WIDGET対応), DockItem, LauncherSettings, BackupPayload
-│   ├── launcher/                    # [Interface] AppDiscoveryRepository, AppLauncher & 実装
-│   ├── widget/                      # WidgetHostManager, LauncherAppWidgetHost, LauncherAppWidgetHostView
-│   ├── storage/                     # [Interface] LayoutRepository, SettingsRepository & Room (v2) / DataStore実装
-│   ├── search/                      # [Interface] SearchEngine & DefaultSearchEngine
-│   ├── backup/                      # [Interface] BackupManager & JsonBackupManager, NovaBackupConverter
-│   └── feed/                        # [Interface] FeedBridge & DefaultFeedBridge (6ジャンル RSS/Atom/OGP)
-└── ui/
-    ├── LauncherScreen.kt            # HorizontalPager (Single / DualSpread) + Adaptive Dock + Overlays
-    ├── LauncherViewModel.kt         # UDF 状態管理 & AppWidget バインド・リサイズ制御
-    ├── adaptive/                    # AdaptiveLayoutSpec (Compact / Expanded 判定)
-    ├── components/                  # AppIconView (Placeholder対応), GestureContainer
-    ├── discover/                    # Page -2: DiscoverPage (左端スワイプでGoogle App起動対応)
-    ├── allapps/                     # Page -1: AllAppsTinyPage
-    ├── home/                        # Page 0..N: HomeGridPage, WidgetItemView, MissingAppDialog
-    ├── dock/                        # AdaptiveDock (Bottom / Right)
-    ├── search/                      # SearchOverlay
-    ├── editor/                      # HomeEditSheet, LockedAlertDialog, ItemPickerDialog, WidgetResizeDialog, PageManagerDialog
-    └── settings/                    # SettingsScreen & Backup/Restore UI
+Google Play を経由せず、GitHub の **Releases** ページから APK ファイルを直接ダウンロードして Android 端末にインストールできます。
+
+### 1. APK をダウンロードする
+1. このリポジトリの **[Releases（最新リリース）](../../releases/latest)** ページを開きます。
+2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.0.0.apk`** をタップしてダウンロードします。
+
+### 2. Android 端末にインストールする
+1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリから **`ChimeLauncher-v1.0.0.apk`** を開きます。
+2. 初回のみ「この提供元の不明なアプリをインストールしますか？」と表示された場合は、**「設定」→「この提供元のアプリを許可」** を ON にして「インストール」をタップします。
+3. **Google Play プロテクトの確認が表示された場合**:
+   - 個人開発の配布用 APK のため、「Play プロテクトによりブロックされました」や「スキャンしますか？」と表示されることがあります。
+   - **「詳細」→「インストールする（安全でない場合でもインストール）」** をタップするとインストールが完了します。
+
+### 3. 初期設定（推奨）
+インストール後、**Chime Launcher** を開いて一番右のページ（またはホーム画面空白長押し → **「Launcher設定 & バックアップ」**）にある **`Chime Launcher 設定`** から以下を設定できます：
+- **デフォルトのホームアプリを選択**: 標準ホームを `Chime Launcher` に切り替えます。
+- **使用状況へのアクセスを許可（任意）**: 検索画面の `Recently Used`（最近使ったアプリ）・`Frequently Used`（よく使うアプリ）に端末全体の利用履歴を反映できます（未許可でもランチャー内の起動履歴で動作します）。
+- **Accessibility権限設定を開く（任意）**: ホーム画面中央からの下スワイプで通知パネルを直接下ろせない端末のみ、`Chime Launcher 通知シェード操作` を ON にしてください。
+
+---
+
+## ✨ 主な機能・特徴
+
+### 1. Chime Moments（ページインジケーターによるアンビエント表現）
+ポップアップや通知で操作を中断させず、ホーム画面下部の **ページインジケーターの微細な変化** だけで1日の節目を静かに伝えます（優先順位：`First Chime > Return Chime > Time Chime`）：
+- **First Chime**: その日初めてホーム画面を表示した際に1度だけ、現在位置のインジケーターから静かな二重の波紋（`• ((●)) •`）が広がります。
+- **Return Chime**: 一定時間以上（デフォルト `1時間`、設定で `30分 / 1時間 / 3時間 / 6時間` に変更可能）離れてからホームへ戻った際、インジケーター間の細いラインと間隔の伸縮（`• ───── ● ───── •`）で時間の経過を表現します。
+- **Time Chime**: 朝（`05:00–10:59`）・昼（`11:00–16:59`）・夕方（`17:00–19:59`）・夜（`20:00–23:59`）・深夜（`00:00–04:59`）の時間帯に応じて、インジケーターの灯りが微細に変化します。
+
+### 2. ページインジケーター 3スタイル切替 (`Dots` / `Icons` / `Text`)
+設定画面の **「表示 (Indicator Style)」** から、好みに合わせて3つの表示モードを切り替えられます：
+- **Dots（デフォルト）**: `•  •  ●  •  •`（現在位置のみ少し大きく明るく表示するミニマル表示）
+- **Icons**: `Discover`（新聞） / `All Apps`（グリッド） / `Home`（家） / `Settings`（歯車）
+- **Text**: `Discover` / `Apps` / `1` / `2` / `Settings`
+
+### 3. Google検索バーの完全排除 & Swipe Up Search（Zero Query 3セクション搭載）
+- ホーム画面上に固定の検索バーは配置せず、**上スワイプ** で即座に検索オーバーレイが起動します。
+- **Zero Query State（検索文字未入力時）**:
+  1. **Recently Used**（最近使ったアプリ）
+  2. **Frequently Used**（よく使うアプリ）
+  3. **Recently Installed**（直近30日以内にインストールしたアプリ）
+- **文字入力時**: `1. 完全一致 → 2. 前方一致 → 3. 部分一致 → 4. 利用頻度ボーナス` の優先順でアプリ・ショートカット・アクション・Web検索を高速表示します。
+
+### 4. Adaptive Fold UI (`Bottom Dock` ↔ `Right Dock` & 左右2ページ見開き)
+- `WindowWidthSizeClass` に基づき、折りたたみ閉状態（Compact）では **下部 Dock + 1ページ表示**、展開状態（Expanded）では **右端 Dock + 左右2ページ見開き表示 (`DUAL_PAGE`)**（Discover と 設定ページは1ページ全画面固定）または **1ページ全画面表示 (`SINGLE_FULL`)** に自動適応します。
+
+### 5. 高密度 AppWidget 対応 & ページ跨ぎドラッグ移動
+- 任意の Android ウィジェットを配置・リサイズ（`spanX × spanY`）でき、余白を極限まで削った高情報密度スケーリングで表示します。
+- Google Keep 等の縦スクロール可能なウィジェット上では、ランチャーの上下スワイプジェスチャーと干渉せずウィジェット内のスクロールが優先されます。
+- アイコンやウィジェットを画面端へドラッグ保持（約0.65秒）することで、ページを跨いだ移動や新規ページの自動作成が可能です。
+
+### 6. Discover ページ（AI・リゼロ・はてなブックマーク統合フィード）
+- 左端ページに `おすすめ (AI・リゼロ)` / `AI・OpenAI` / `リゼロ・アニメ` / `はてブ 総合` / `はてブ IT` / `ビジネス・政治` の6ジャンル RSS/Atom リーダーを内蔵。
+- Discover ページでさらに左端（行き止まり方向）へスワイプすると、Google アプリ（Google Discover）が起動します。
+
+### 7. JSON / Nova Launcher バックアップ復元 & 別端末アプリ自動解決
+- `.json` バックアップの保存・エクスポートに加え、**Nova Launcher のバックアップ（`.novabackup` / `.db` / `.zip`）** の直接インポートに対応。
+- Galaxy から Pixel へバックアップを移行した際などに発生する未インストールアプリ（例：Galaxy版 Kindle `com.amazon.kindleForSamsung` や Samsung 標準カメラ等）の原因診断、Google Play 正規パッケージID変換、キーワード検索、および端末内アプリへの1タップ／一括置き換え機能を備えています。
+
+---
+
+## 🛠 開発者向けビルド方法
+
+```bash
+# デバッグAPKのビルドとユニットテスト実行
+./gradlew assembleDebug testDebugUnitTest
+
+# 生成されるAPKの場所
+# app/build/outputs/apk/debug/app-debug.apk
 ```
 
----
-
-## ビルドと実行方法
-
-1. Android Studio で本プロジェクトディレクトリ (`/Users/yohei/projects/TodoActions/AndroidLauncher`) を開きます。
-2. Gradle Sync を実行し、実機（Galaxy Z Fold / Pixel）または Foldable エミュレータへ `app` モジュールを実行します。
-3. ホーム画面の空白部分を長押し → **「Launcher設定 & バックアップ」** から：
-   - **「デフォルトのホームアプリを選択」** で `My Launcher` を標準ホームに設定します。
-   - 下スワイプ通知を利用する場合は **「Accessibility権限設定を開く」** から `My Launcher 通知シェード操作` を ON にします。
+詳細な変更履歴は [CHANGELOG.md](file:///Users/yohei/projects/TodoActions/AndroidLauncher/CHANGELOG.md) を参照してください。

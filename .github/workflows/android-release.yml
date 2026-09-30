@@ -1,0 +1,67 @@
+name: Build & Release Chime Launcher APK
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Android APK & Run Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests & Assemble Release/Debug APKs
+        run: ./gradlew testDebugUnitTest assembleRelease assembleDebug
+
+      - name: Prepare APK artifacts for distribution
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk ChimeLauncher-latest.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ChimeLauncher-latest-debug.apk
+
+      - name: Upload APK to Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChimeLauncher-APK
+          path: |
+            ChimeLauncher-latest.apk
+            ChimeLauncher-latest-debug.apk
+
+      - name: Publish to GitHub Releases (on tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          APK_RELEASE="ChimeLauncher-${TAG_NAME}.apk"
+          APK_DEBUG="ChimeLauncher-${TAG_NAME}-debug.apk"
+          cp app/build/outputs/apk/release/app-release.apk "${APK_RELEASE}"
+          cp app/build/outputs/apk/debug/app-debug.apk "${APK_DEBUG}"
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" "${APK_RELEASE}" "${APK_DEBUG}" --clobber
+          else
+            gh release create "${TAG_NAME}" "${APK_RELEASE}" "${APK_DEBUG}" \
+              --title "Chime Launcher ${TAG_NAME}" \
+              --generate-notes
+          fi
