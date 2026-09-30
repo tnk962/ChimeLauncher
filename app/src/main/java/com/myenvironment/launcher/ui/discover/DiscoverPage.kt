@@ -57,6 +57,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import com.myenvironment.launcher.core.feed.DiscoverArticle
 import com.myenvironment.launcher.core.feed.FeedBridge
 import com.myenvironment.launcher.core.feed.FeedCategory
+import com.myenvironment.launcher.core.feed.overlay.OverlayDragSession
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.LauncherAction
 import kotlinx.coroutines.launch
@@ -74,7 +77,7 @@ import kotlin.math.abs
  *
  * - Googleニュース（新聞系見出し）を排除し、AI・OpenAI（XenoSpectrum等）やリゼロ・アニメ・はてブを中心とした6ジャンルを下部チップで切り替え可能。
  * - 各記事カードにサムネイル画像と要約スニペットを表示し、どんな記事か一目で分かるUI。
- * - 左端のDiscoverページ表示中に、さらに左端の行き止まり方向へスワイプするとGoogleアプリ（Discover）を固定動作として起動する。
+ * - 独自フィード端のドラッグをCompanion経由のGoogle Discover overlayへ渡す。
  */
 @Composable
 fun DiscoverPage(
@@ -87,6 +90,11 @@ fun DiscoverPage(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val googleOverlay = LocalGoogleOverlayClient.current
+    val overlayState = googleOverlay?.state?.collectAsStateWithLifecycle()?.value
+    val overlayEnabled = discoverMode == DiscoverMode.NATIVE_BRIDGE
+    val currentOverlayEnabled by rememberUpdatedState(overlayEnabled)
+    val touchSlop = LocalViewConfiguration.current.touchSlop
     var selectedCategory by remember { mutableStateOf(FeedCategory.DISCOVER_CURATED) }
     val articlesCache = remember { mutableStateMapOf<FeedCategory, List<DiscoverArticle>>() }
     var isLoading by remember { mutableStateOf(false) }
@@ -134,7 +142,7 @@ fun DiscoverPage(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
+            .pointerInput(googleOverlay, touchSlop) {
                 val thresholdPx = 64.dp.toPx()
                 val bottomChipExclusionPx = 76.dp.toPx()
                 awaitEachGesture {
@@ -146,7 +154,10 @@ fun DiscoverPage(
                     var totalDx = 0f
                     var totalDy = 0f
                     var triggered = false
-                    while (true) {
+                    var overlayDragging = false
+                    val drag = OverlayDragSession(touchSlop, googleOverlay?.revealWidth ?: size.width.toFloat())
+                    try {
+                      while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (!change.pressed) break
@@ -155,20 +166,36 @@ fun DiscoverPage(
                         totalDx += dx
                         totalDy += dy
 
-                        // 左端の行き止まり方向（左→右へ指を動かすスワイプ: totalDx > 0）へ一定以上スワイプしたらGoogleアプリを起動
-                        if (!triggered &&
-                            totalDx > thresholdPx &&
-                            abs(totalDx) > abs(totalDy) * 1.3f
+                        val progress = if (currentOverlayEnabled) drag.move(dx, dy) {
+                            googleOverlay?.beginScroll() == true
+                        } else null
+                        if (progress != null) {
+                            overlayDragging = true
+                            change.consume()
+                            googleOverlay?.scroll(progress)
+                        } else if (!triggered && !currentOverlayEnabled &&
+                            totalDx > thresholdPx && abs(totalDx) > abs(totalDy) * 1.3f
                         ) {
                             triggered = true
                             change.consume()
                             currentOnOpenGoogleApp()
                         }
+                      }
+                    } finally {
+                        if (overlayDragging) googleOverlay?.endScroll()
                     }
                 }
             }
             .padding(horizontal = 10.dp)
     ) {
+        if (overlayEnabled) {
+            Text(
+                text = overlayState?.message ?: "Chime Discover Companionをインストールしてください",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+            )
+        }
         // 1. コンパクトヘッダーバー（タイトル ＋ Google App起動ボタン ＋ はてブ起動ボタン ＋ 更新 ＋ 設定）
         Row(
             modifier = Modifier

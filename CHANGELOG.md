@@ -4,6 +4,16 @@
 
 ---
 
+## [1.2.0-discover-preview.1] - 2026-10-01 (Build 12)
+
+- 独自フィードのさらに左にGoogle Discover overlayを接続するChime Discover Companionを追加。
+- 2つのAPK間の署名・UID検証、Window/Activity連携、切断時の再接続、Fold構成変更処理を追加。
+- 独自フィード端の横ドラッグをGoogleへ連続して渡し、RSSページと全アプリの並びを維持。
+- 既存のアプリ内更新を維持し、プレビューから同番号の正式版への更新判定を追加。
+- Google Appを導入した実機上での表示と操作は未確認。[導入と検証範囲](docs/20261001_google-discover-preview.md)を参照。
+
+---
+
 ## [1.1.0] - 2026-09-30 (Build 11) — アプリ内自動アップデート & GitHub Actions CI 修正
 
 ### Added & Fixed

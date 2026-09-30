@@ -52,7 +52,7 @@ class DefaultFeedBridge(
     companion object {
         const val GOOGLE_APP_PACKAGE = "com.google.android.googlequicksearchbox"
         const val GOOGLE_SEARCH_ACTIVITY = "com.google.android.googlequicksearchbox.SearchActivity"
-        const val LAWNFEED_PACKAGE = "app.lawnchair.lawnfeed"
+        const val COMPANION_PACKAGE = "com.myenvironment.chimediscoverbridge"
         private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
 
@@ -75,8 +75,8 @@ class DefaultFeedBridge(
 
     override fun isNativeBridgeAvailable(): Boolean {
         return try {
-            packageManager.getPackageInfo(LAWNFEED_PACKAGE, 0)
-            true
+            packageManager.getPackageInfo(COMPANION_PACKAGE, 0)
+            packageManager.checkSignatures(appContext.packageName, COMPANION_PACKAGE) == android.content.pm.PackageManager.SIGNATURE_MATCH
         } catch (_: Exception) {
             false
         }

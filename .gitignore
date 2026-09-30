@@ -9,5 +9,10 @@
 .cxx
 local.properties
 app/build/
+discover-companion/build/
+discover-protocol/build/
+*.keystore
+*.jks
+.kotlin/
 .android-sdk/
 .android-home/

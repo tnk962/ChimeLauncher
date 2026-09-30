@@ -8,8 +8,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class DiscoverMode(val displayName: String, val description: String) {
     NATIVE_BRIDGE(
-        displayName = "Discover フィード表示 (推奨)",
-        description = "左端ページに記事一覧を表示し、さらに端（行き止まり）へスワイプするとGoogleアプリを起動します"
+        displayName = "独自フィード + Google Discover (推奨)",
+        description = "独自フィードのさらに左にGoogle Discoverを表示します。Chime Discover Companionが必要です"
     ),
     GOOGLE_APP(
         displayName = "Google Appを自動で開く",

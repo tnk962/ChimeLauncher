@@ -135,7 +135,10 @@ object AppUpdateParser {
             if (lat > cur) return true
             if (lat < cur) return false
         }
-        return false
+        // Stable releases supersede a preview with the same numeric version.
+        val currentIsPreview = currentVersionName.substringBefore("+").contains('-')
+        val latestIsPreview = latestTagName.substringBefore("+").contains('-')
+        return currentIsPreview && !latestIsPreview
     }
 
     /**

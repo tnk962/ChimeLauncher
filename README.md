@@ -1,4 +1,6 @@
-# Chime Launcher (v1.1.0)
+# Chime Launcher (v1.2.0 Discover preview)
+
+Google Discoverの連続スワイプ対応をこのブランチで開発しています。[プレビューリリース](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.2.0-discover-preview.1)から本体とCompanionの2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。Google App実機連携は確認待ちです。
 
 > **Chimeは通知しない。気づかせる。**  
 > *Chime Moments are ambient, not interruptive.*
@@ -66,7 +68,7 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ### 6. Discover ページ（AI・リゼロ・はてなブックマーク統合フィード）
 - 左端ページに `おすすめ (AI・リゼロ)` / `AI・OpenAI` / `リゼロ・アニメ` / `はてブ 総合` / `はてブ IT` / `ビジネス・政治` の6ジャンル RSS/Atom リーダーを内蔵。
-- Discover ページでさらに左端（行き止まり方向）へスワイプすると、Google アプリ（Google Discover）が起動します。
+- Companion導入時は、独自フィードのさらに左へのドラッグをGoogle Discover overlayへ連続して渡します。Companionが利用できない場合は状態を表示し、Googleボタンから別画面として開けます。
 
 ### 7. JSON / Nova Launcher バックアップ復元 & 別端末アプリ自動解決
 - `.json` バックアップの保存・エクスポートに加え、**Nova Launcher のバックアップ（`.novabackup` / `.db` / `.zip`）** の直接インポートに対応。

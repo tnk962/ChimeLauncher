@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "MyLauncher"
 include(":app")
+include(":discover-protocol", ":discover-companion")
