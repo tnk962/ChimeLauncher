@@ -59,10 +59,18 @@ class DefaultFeedBridge(
         private val REGEX_JSLOG_85008 = Regex("""jslog="85008;\s*3:([A-Za-z0-9+/=_\-]+);""")
         private val REGEX_JSLOG_95014 = Regex("""jslog="95014;\s*5:([A-Za-z0-9+/=_\-]+);""")
         private val REGEX_JSON_HTTP_URL = Regex(""""(https?://[^"\\\s]+(?:\\u00[0-9a-fA-F]{2}[^"\\\s]*)*)"""")
-        private val REGEX_GNEWS_TITLE = Regex("""<a[^>]+class="[^"]*(?:gPFEn|JtKRv)[^"]*"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-        private val REGEX_GNEWS_SOURCE = Regex("""<div[^>]+class="[^"]*vr1PYe[^"]*"[^>]*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        private val REGEX_GNEWS_TITLE = Regex(
+            """<a[^>]+(?:data-n-tid="29"|class="[^"]*(?:gPFEn|JtKRv|DY5T1d)[^"]*")[^>]*>(.*?)</a>""",
+            RegexOption.DOT_MATCHES_ALL
+        )
+        private val REGEX_GNEWS_SOURCE = Regex(
+            """<(?:div|a|span)[^>]+(?:data-n-tid="9"|class="[^"]*(?:vr1PYe|wEwyrc)[^"]*")[^>]*>(.*?)</(?:div|a|span)>""",
+            RegexOption.DOT_MATCHES_ALL
+        )
         private val REGEX_GNEWS_TIME = Regex("""<time[^>]*>(.*?)</time>""", RegexOption.DOT_MATCHES_ALL)
-        private val REGEX_GNEWS_QUAVAD_IMG = Regex("""<img[^>]+class="[^"]*Quavad[^"]*"[^>]+src="([^"]+)"""")
+        private val REGEX_GNEWS_ATTACHMENT_IMG = Regex(
+            """<img[^>]+src="((?:https://news\.google\.com)?/api/attachments/[^"]+)""""
+        )
     }
 
     override fun isNativeBridgeAvailable(): Boolean {
@@ -155,31 +163,50 @@ class DefaultFeedBridge(
                             .getOrDefault(emptyList())
                     }
 
-                    // 2. 補助 RSS フィード (Yahoo!ニュース トピックス / Google News RSS) を並列取得
+                    // 2. 補助 RSS フィードを並列取得
                     val rssDeferreds = category.rssUrls.map { feedUrl ->
                         async {
-                            runCatching { fetchRssFeed(feedUrl) }.getOrDefault(emptyList())
+                            feedUrl to runCatching { fetchRssFeed(feedUrl) }.getOrDefault(emptyList())
                         }
                     }
 
                     val googleTopicArticles = googleTopicDeferred.await()
-                    val rssLists = rssDeferreds.map { it.await() }
+                    val rssResults = rssDeferreds.map { it.await() }
 
                     val allLists = buildList {
                         if (googleTopicArticles.isNotEmpty()) {
                             add(googleTopicArticles)
-                        }
-                        rssLists.forEach { list ->
-                            if (list.isNotEmpty()) add(list)
+                            // Google News トピックHTMLが取得できた場合は、画像なし重複となる news.google.com/rss を除外し、Yahoo!ニュース等の直接RSSのみを統合
+                            rssResults.forEach { (feedUrl, list) ->
+                                if (!feedUrl.contains("news.google.com/rss") && list.isNotEmpty()) {
+                                    add(list)
+                                }
+                            }
+                        } else {
+                            // フォールバック時のみ全RSSを使用
+                            rssResults.forEach { (_, list) ->
+                                if (list.isNotEmpty()) add(list)
+                            }
                         }
                     }
 
-                    // 複数ソースをバランスよくインターリーブ統合して重複を排除
+                    // Google News トピック記事を主軸にしつつ補助フィードを統合して重複を排除
                     val merged = mutableListOf<DiscoverArticle>()
-                    val maxLen = allLists.maxOfOrNull { it.size } ?: 0
-                    for (i in 0 until maxLen) {
-                        for (list in allLists) {
-                            list.getOrNull(i)?.let { merged.add(it) }
+                    if (allLists.size == 1) {
+                        merged.addAll(allLists[0])
+                    } else if (allLists.isNotEmpty()) {
+                        val primary = allLists[0]
+                        val secondaryLists = allLists.drop(1)
+                        var secIdx = 0
+                        for (i in primary.indices) {
+                            merged.add(primary[i])
+                            // 3件ごとに補助フィードの記事を1件差し込む
+                            if (i % 3 == 2 && secondaryLists.isNotEmpty()) {
+                                for (sList in secondaryLists) {
+                                    sList.getOrNull(secIdx)?.let { merged.add(it) }
+                                }
+                                secIdx++
+                            }
                         }
                     }
 
@@ -232,7 +259,7 @@ class DefaultFeedBridge(
             val sourceName: String,
             val publishedAt: String,
             val url: String,
-            val imageUrl: String?,
+            var imageUrl: String?,
             val relatedLines: MutableList<String> = mutableListOf()
         )
 
@@ -245,10 +272,10 @@ class DefaultFeedBridge(
             val chunkEnd = minOf(nextStartIdx, startIdx + 8500)
             val chunk = html.substring(startIdx, chunkEnd)
 
-            // 直前350文字に UwIKyb がある場合は同一トピック内の関連サブ記事
+            // 直前350文字に UwIKyb (Desktop) または OGnjD / EjqUne (Mobile) がある場合は同一トピック内の関連サブ記事
             val prefixStart = maxOf(0, startIdx - 350)
             val prefix = html.substring(prefixStart, startIdx)
-            val isSubItem = prefix.contains("UwIKyb")
+            val isSubItem = prefix.contains("UwIKyb") || prefix.contains("OGnjD") || prefix.contains("EjqUne")
 
             val rawTitleHtml = REGEX_GNEWS_TITLE.find(chunk)?.groupValues?.getOrNull(1).orEmpty()
             val title = decodeHtmlText(rawTitleHtml)
@@ -268,10 +295,11 @@ class DefaultFeedBridge(
             // jslog="85008; 3:<base64>" から配信元の高解像度サムネイル画像URLをデコード
             val b64Img = match.groupValues.getOrNull(1).orEmpty()
             val decodedImgUrl = decodeUrlsFromBase64(b64Img).firstOrNull { isValidArticleImageUrl(it) }
-            val fallbackImgUrl = REGEX_GNEWS_QUAVAD_IMG.find(chunk)?.groupValues?.getOrNull(1)?.let { src ->
+            val fallbackImgUrl = REGEX_GNEWS_ATTACHMENT_IMG.find(chunk)?.groupValues?.getOrNull(1)?.let { src ->
+                val cleanSrc = src.replace("&amp;", "&")
                 when {
-                    src.startsWith("http") -> src
-                    src.startsWith("/") -> "https://news.google.com$src"
+                    cleanSrc.startsWith("http") -> cleanSrc
+                    cleanSrc.startsWith("/") -> "https://news.google.com$cleanSrc"
                     else -> null
                 }
             }
@@ -279,8 +307,12 @@ class DefaultFeedBridge(
 
             if (isSubItem && mainItems.isNotEmpty()) {
                 val parent = mainItems.last()
+                if (parent.imageUrl == null && finalImageUrl != null) {
+                    parent.imageUrl = finalImageUrl
+                }
                 if (parent.relatedLines.size < 2 && title != parent.title) {
-                    parent.relatedLines.add("・$title ($sourceName)")
+                    val (cleanSubTitle, cleanSubSource) = splitTitleAndSource(title, sourceName, articleUrl)
+                    parent.relatedLines.add("・$cleanSubTitle ($cleanSubSource)")
                 }
             } else {
                 val (cleanTitle, cleanSource) = splitTitleAndSource(title, sourceName, articleUrl)

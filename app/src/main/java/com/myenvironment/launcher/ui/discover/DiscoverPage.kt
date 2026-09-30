@@ -370,18 +370,18 @@ private fun DiscoverArticleCard(
     }
     var thumbnailBitmap by remember(article.id) { mutableStateOf<ImageBitmap?>(initialCachedImg) }
 
-    val initialSummary = remember(article.id, article.summary, article.url) {
-        article.summary.ifBlank {
-            feedBridge.getCachedArticleSummary(article.url).orEmpty()
-        }
+    val cachedOgpSummary = remember(article.id, article.url) {
+        feedBridge.getCachedArticleSummary(article.url)
     }
-    var summaryText by remember(article.id) { mutableStateOf(initialSummary) }
+    var summaryText by remember(article.id) {
+        mutableStateOf(cachedOgpSummary ?: article.summary)
+    }
 
     LaunchedEffect(article.id, article.imageUrl, article.url) {
         if (thumbnailBitmap == null) {
             thumbnailBitmap = feedBridge.loadArticleImage(article.imageUrl, article.url)
         }
-        if (summaryText.isBlank()) {
+        if (cachedOgpSummary == null) {
             val resolved = feedBridge.loadArticleSummary(article.url)
             if (!resolved.isNullOrBlank()) {
                 summaryText = resolved
