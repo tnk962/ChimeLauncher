@@ -14,8 +14,8 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.2.0-discover-preview.1"
+        versionCode = 13
+        versionName = "1.2.0-discover-preview.2"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-01 Discover preview\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

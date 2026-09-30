@@ -212,7 +212,11 @@ class GoogleOverlayClient(private val activity: Activity) {
     private fun attachWindow() {
         if (!attached || overlay == null || callback == null) return
         val attrs = WindowManager.LayoutParams().apply { copyFrom(activity.window.attributes) }
-        attrs.token = activity.window.decorView.windowToken
+        // Google creates an application-level window (type 4), not a child window.
+        // View.windowToken identifies ViewRoot's window and is rejected as BadToken.
+        attrs.token = activity.window.attributes.token
+            ?: activity.window.decorView.applicationWindowToken
+            ?: return
         val cb = callback!!
         call {
             if (apiVersion >= 3) {
