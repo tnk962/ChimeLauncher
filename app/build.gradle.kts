@@ -14,9 +14,9 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.1.0"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-09-30 23:35 JST\"")
+        versionCode = 14
+        versionName = "1.2.0"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-01 Discover release\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -28,12 +28,17 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        create("distribution") {
+            storeFile = file(providers.environmentVariable("CHIME_KEYSTORE_PATH").orElse("${rootProject.projectDir}/.signing/chime.keystore").get())
+            storePassword = providers.environmentVariable("CHIME_KEYSTORE_PASSWORD").orElse("android").get()
+            keyAlias = providers.environmentVariable("CHIME_KEY_ALIAS").orElse("androiddebugkey").get()
+            keyPassword = providers.environmentVariable("CHIME_KEY_PASSWORD").orElse("android").get()
+        }
     }
-
     buildTypes {
         release {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (providers.environmentVariable("CHIME_KEYSTORE_PATH").isPresent) signingConfigs.getByName("distribution") else signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -57,6 +62,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":discover-protocol"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

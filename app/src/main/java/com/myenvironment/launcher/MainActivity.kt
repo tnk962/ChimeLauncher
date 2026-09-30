@@ -1,11 +1,15 @@
 package com.myenvironment.launcher
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.CompositionLocalProvider
+import com.myenvironment.launcher.core.feed.overlay.GoogleOverlayClient
+import com.myenvironment.launcher.ui.discover.LocalGoogleOverlayClient
 import com.myenvironment.launcher.ui.LauncherScreen
 import com.myenvironment.launcher.ui.LauncherViewModel
 import com.myenvironment.launcher.ui.theme.MyLauncherTheme
@@ -19,6 +23,7 @@ import com.myenvironment.launcher.ui.theme.MyLauncherTheme
  * - フォアグラウンド復帰・離脱時に Chime Moments (First / Return / Time Chime) を評価する。
  */
 class MainActivity : ComponentActivity() {
+    private lateinit var googleOverlay: GoogleOverlayClient
 
     private val viewModel: LauncherViewModel by viewModels {
         val app = application as LauncherApplication
@@ -28,25 +33,40 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        googleOverlay = GoogleOverlayClient(this)
 
         setContent {
             MyLauncherTheme {
-                LauncherScreen(viewModel = viewModel)
+                CompositionLocalProvider(LocalGoogleOverlayClient provides googleOverlay) {
+                    LauncherScreen(viewModel = viewModel)
+                }
             }
         }
     }
 
     override fun onStart() {
         super.onStart()
+        googleOverlay.onStart()
         viewModel.widgetHostManager.startListening()
         viewModel.onLauncherResumed()
     }
 
     override fun onStop() {
+        googleOverlay.onStop()
         super.onStop()
         viewModel.widgetHostManager.stopListening()
         viewModel.onLauncherPaused()
     }
+
+    override fun onResume() { super.onResume(); googleOverlay.onResume() }
+    override fun onPause() { googleOverlay.onPause(); super.onPause() }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); googleOverlay.onAttachedToWindow() }
+    override fun onDetachedFromWindow() { googleOverlay.onDetachedFromWindow(); super.onDetachedFromWindow() }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        googleOverlay.onConfigurationChanged()
+    }
+    override fun onDestroy() { googleOverlay.onDestroy(); super.onDestroy() }
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -63,6 +83,7 @@ class MainActivity : ComponentActivity() {
         if (intent.action == Intent.ACTION_MAIN &&
             (intent.hasCategory(Intent.CATEGORY_HOME) || intent.hasCategory(Intent.CATEGORY_LAUNCHER))
         ) {
+            googleOverlay.close()
             viewModel.onHomeGestureInvoked()
         }
     }

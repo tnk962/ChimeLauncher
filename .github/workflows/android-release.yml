@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - "feature/google-discover-*"
     tags:
       - "v*"
   workflow_dispatch:
@@ -15,6 +16,8 @@ jobs:
   build-apk:
     name: Build Android APK & Run Unit Tests
     runs-on: ubuntu-latest
+    env:
+      HAS_DISTRIBUTION_KEY: ${{ secrets.CHIME_KEYSTORE_BASE64 != '' }}
 
     steps:
       - name: Checkout repository
@@ -32,13 +35,27 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Restore distribution signing key
+        if: env.HAS_DISTRIBUTION_KEY == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CHIME_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.CHIME_KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.CHIME_KEY_ALIAS || 'androiddebugkey' }}
+          KEY_PASSWORD: ${{ secrets.CHIME_KEY_PASSWORD || 'android' }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/chime.keystore"
+          echo "CHIME_KEYSTORE_PATH=$RUNNER_TEMP/chime.keystore" >> "$GITHUB_ENV"
+          echo "CHIME_KEYSTORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "CHIME_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "CHIME_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+
       - name: Run Unit Tests & Assemble Release/Debug APKs
-        run: ./gradlew testDebugUnitTest assembleRelease assembleDebug
+        run: ./gradlew :app:testDebugUnitTest :app:assembleRelease :discover-companion:assembleRelease
 
       - name: Prepare APK artifacts for distribution
         run: |
           cp app/build/outputs/apk/release/app-release.apk ChimeLauncher-latest.apk
-          cp app/build/outputs/apk/debug/app-debug.apk ChimeLauncher-latest-debug.apk
+          cp discover-companion/build/outputs/apk/release/discover-companion-release.apk ChimeDiscoverCompanion-latest.apk
 
       - name: Upload APK to Actions Artifacts
         uses: actions/upload-artifact@v4
@@ -46,22 +63,24 @@ jobs:
           name: ChimeLauncher-APK
           path: |
             ChimeLauncher-latest.apk
-            ChimeLauncher-latest-debug.apk
+            ChimeDiscoverCompanion-latest.apk
 
       - name: Publish to GitHub Releases (on tag push)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_DISTRIBUTION_KEY == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="${GITHUB_REF#refs/tags/}"
           APK_RELEASE="ChimeLauncher-${TAG_NAME}.apk"
-          APK_DEBUG="ChimeLauncher-${TAG_NAME}-debug.apk"
+          APK_COMPANION="ChimeDiscoverCompanion-${TAG_NAME}.apk"
           cp app/build/outputs/apk/release/app-release.apk "${APK_RELEASE}"
-          cp app/build/outputs/apk/debug/app-debug.apk "${APK_DEBUG}"
+          cp discover-companion/build/outputs/apk/release/discover-companion-release.apk "${APK_COMPANION}"
           if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
-            gh release upload "${TAG_NAME}" "${APK_RELEASE}" "${APK_DEBUG}" --clobber
+            echo "Release already exists; keeping its verified APKs unchanged."
           else
-            gh release create "${TAG_NAME}" "${APK_RELEASE}" "${APK_DEBUG}" \
+            EXTRA_ARGS=()
+            if [[ "$TAG_NAME" == *preview* ]]; then EXTRA_ARGS+=(--prerelease); fi
+            gh release create "${TAG_NAME}" "${APK_RELEASE}" "${APK_COMPANION}" \
               --title "Chime Launcher ${TAG_NAME}" \
-              --generate-notes
+              --generate-notes "${EXTRA_ARGS[@]}"
           fi

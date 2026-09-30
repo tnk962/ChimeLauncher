@@ -63,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -88,6 +89,7 @@ import com.myenvironment.launcher.ui.adaptive.rememberAdaptiveLayoutSpec
 import com.myenvironment.launcher.ui.allapps.AllAppsTinyPage
 import com.myenvironment.launcher.ui.components.LauncherItemGraphic
 import com.myenvironment.launcher.ui.discover.DiscoverPage
+import com.myenvironment.launcher.ui.discover.LocalGoogleOverlayClient
 import com.myenvironment.launcher.ui.dock.AdaptiveDock
 import com.myenvironment.launcher.ui.editor.HomeEditSheet
 import com.myenvironment.launcher.ui.editor.ItemPickerDialog
@@ -209,6 +211,11 @@ fun LauncherScreen(
     viewModel: LauncherViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val googleOverlay = LocalGoogleOverlayClient.current
+    val overlayState = googleOverlay?.state?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(uiState.settings.discoverMode, googleOverlay) {
+        googleOverlay?.setEnabled(uiState.settings.discoverMode == DiscoverMode.NATIVE_BRIDGE)
+    }
     val context = LocalContext.current
     val density = LocalDensity.current
     val hapticFeedback = LocalHapticFeedback.current
@@ -595,7 +602,7 @@ fun LauncherScreen(
     }
 
     // Backボタン押下時：オーバーレイや編集モードを閉じ、HOME以外のページにいる場合はHOMEへ戻す (仕様 4)
-    val shouldInterceptBack = uiState.overlay.isSearchOverlayOpen ||
+    val shouldInterceptBack = (overlayState?.progress ?: 0f) > 0f || uiState.overlay.isSearchOverlayOpen ||
         uiState.overlay.isSettingsOpen ||
         uiState.overlay.resizingWidgetTarget != null ||
         uiState.overlay.isEditMode ||
@@ -603,6 +610,7 @@ fun LauncherScreen(
 
     BackHandler(enabled = shouldInterceptBack) {
         when {
+            (overlayState?.progress ?: 0f) > 0f -> googleOverlay?.close()
             uiState.overlay.resizingWidgetTarget != null -> viewModel.dismissResizeWidgetDialog()
             uiState.overlay.isSearchOverlayOpen -> viewModel.closeSearchOverlay()
             uiState.overlay.isSettingsOpen -> viewModel.closeSettings()
@@ -639,6 +647,9 @@ fun LauncherScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .graphicsLayer {
+                translationX = (overlayState?.progress ?: 0f) * size.width
+            }
             .statusBarsPadding()
             .navigationBarsPadding()
             .onGloballyPositioned { coords ->

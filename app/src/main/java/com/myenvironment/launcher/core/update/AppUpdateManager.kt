@@ -135,7 +135,10 @@ object AppUpdateParser {
             if (lat > cur) return true
             if (lat < cur) return false
         }
-        return false
+        // Stable releases supersede a preview with the same numeric version.
+        val currentIsPreview = currentVersionName.substringBefore("+").contains('-')
+        val latestIsPreview = latestTagName.substringBefore("+").contains('-')
+        return currentIsPreview && !latestIsPreview
     }
 
     /**
@@ -158,14 +161,17 @@ object AppUpdateParser {
             val assetsArray: JsonArray = root["assets"]?.jsonArray ?: JsonArray(emptyList())
             val assetObjects: List<JsonObject> = assetsArray.mapNotNull { it as? JsonObject }
 
-            // Release APK ("debug" を含まない .apk) を最優先し、なければ最初の .apk アセットを選択
-            val preferredAsset = assetObjects.firstOrNull { obj ->
+            // Never install the separate Companion as an update to the launcher.
+            val launcherAssets = assetObjects.filter { obj ->
                 val name = obj["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                name.endsWith(".apk", ignoreCase = true) && !name.contains("debug", ignoreCase = true)
-            } ?: assetObjects.firstOrNull { obj ->
-                val name = obj["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                name.endsWith(".apk", ignoreCase = true)
+                name.startsWith("ChimeLauncher-", ignoreCase = true) &&
+                    name.endsWith(".apk", ignoreCase = true) &&
+                    !name.contains("companion", ignoreCase = true)
             }
+            val preferredAsset = launcherAssets.firstOrNull { obj ->
+                val name = obj["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                !name.contains("debug", ignoreCase = true)
+            } ?: launcherAssets.firstOrNull()
 
             val apkDownloadUrl = preferredAsset?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
             val apkFileName = preferredAsset?.get("name")?.jsonPrimitive?.contentOrNull
