@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -91,6 +92,7 @@ fun SettingsScreen(
     onExportBackupToUri: (Uri) -> Unit,
     onImportBackupFromUri: (Uri) -> Unit,
     onShowJsonPreview: () -> Unit,
+    onAutoBindMissingApps: () -> Unit = {},
     onAddDemoMissingAppPlaceholder: () -> Unit,
     onClose: () -> Unit
 ) {
@@ -549,6 +551,21 @@ fun SettingsScreen(
                     Text("現在のバックアップJSONを確認 / 直接編集復元")
                 }
 
+                FilledTonalButton(
+                    onClick = onAutoBindMissingApps,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("未インストール枠を端末内アプリ(Kindle・標準等)と一括紐付け")
+                }
+                Text(
+                    text = "※ Galaxy版パッケージ (com.amazon.kindleForSamsung 等) やSamsung固有アプリ枠を、Pixel内のKindleや標準アプリへ自動変換して紐付けます。",
+                    color = Color(0xFF9AA0A6),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 Text(
@@ -632,6 +649,17 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                FilledTonalButton(
+                    onClick = onAutoBindMissingApps,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("未インストール枠を端末内アプリと一括自動紐付け")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 OutlinedButton(
                     onClick = onAddDemoMissingAppPlaceholder,
                     modifier = Modifier.fillMaxWidth()
@@ -673,7 +701,7 @@ fun SettingsScreen(
                         color = Color(0x33FFFFFF)
                     )
                     Text(
-                        text = "最新更新 (v0.5.0): Discoverページからさらに左端の行き止まり方向へスワイプした際にGoogleアプリ（Discover）を自動起動する固定動作を追加",
+                        text = "最新更新 (v0.9.0): Galaxy等の別端末バックアップ復元時に未インストールとなるアプリ（Galaxy版KindleやSamsung標準アプリ等）のパッケージ違い診断・Google Play正規ID変換・キーワード/Webしつこい検索・Pixel内アプリへの1タップ/一括置き換え機能を追加",
                         color = Color(0xFF9AA0A6),
                         fontSize = 11.sp,
                         lineHeight = 16.sp

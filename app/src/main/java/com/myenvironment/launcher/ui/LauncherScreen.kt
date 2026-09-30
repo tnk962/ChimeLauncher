@@ -1080,6 +1080,7 @@ fun LauncherScreen(
                 onExportBackupToUri = { uri -> viewModel.exportBackupToUri(context, uri) },
                 onImportBackupFromUri = { uri -> viewModel.importBackupFromUri(context, uri) },
                 onShowJsonPreview = { viewModel.openJsonBackupPreview() },
+                onAutoBindMissingApps = { viewModel.autoBindMissingAppsToInstalledApps() },
                 onAddDemoMissingAppPlaceholder = {
                     viewModel.addDemoMissingAppPlaceholder(adaptiveSpec.isExpanded && !isDualPageMode)
                 },
@@ -1200,7 +1201,13 @@ fun LauncherScreen(
         if (missingTarget != null) {
             MissingAppDialog(
                 item = missingTarget,
+                installedApps = uiState.installedApps,
                 onOpenPlayStore = { pkg -> viewModel.openPlayStoreForPackage(pkg) },
+                onSearchPlayStore = { query -> viewModel.searchPlayStoreForQuery(query) },
+                onSearchPlayStoreWeb = { query -> viewModel.searchPlayStoreOnWebForQuery(query) },
+                onReplaceWithInstalledApp = { item, targetApp ->
+                    viewModel.replaceMissingItemWithInstalledApp(item, targetApp)
+                },
                 onRemoveFromHome = { item -> viewModel.deleteLayoutItem(item) },
                 onDismiss = { viewModel.dismissMissingAppDialog() }
             )
@@ -1374,6 +1381,7 @@ private fun LauncherPageContent(
                 onExportBackupToUri = { uri -> viewModel.exportBackupToUri(context, uri) },
                 onImportBackupFromUri = { uri -> viewModel.importBackupFromUri(context, uri) },
                 onShowJsonPreview = { viewModel.openJsonBackupPreview() },
+                onAutoBindMissingApps = { viewModel.autoBindMissingAppsToInstalledApps() },
                 onAddDemoMissingAppPlaceholder = {
                     viewModel.addDemoMissingAppPlaceholder(useExpandedFullGrid)
                 },

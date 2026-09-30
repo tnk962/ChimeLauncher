@@ -126,6 +126,57 @@ class AndroidAppLauncher(
         }
     }
 
+    override fun searchPlayStore(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        val encoded = Uri.encode(trimmed)
+
+        // 1. Play Store アプリ内検索 (market://search?q=...&c=apps)
+        try {
+            val marketSearchIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("market://search?q=$encoded&c=apps")
+            ).apply {
+                setPackage("com.android.vending")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            appContext.startActivity(marketSearchIntent)
+            return
+        } catch (_: Exception) {
+            // Play Store アプリがない場合は Web Play Store 検索へ Fallback
+        }
+
+        // 2. ブラウザで Google Play ストア検索 URL を開く
+        try {
+            val webSearchIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://play.google.com/store/search?q=$encoded&c=apps")
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            appContext.startActivity(webSearchIntent)
+        } catch (_: Exception) {
+            Toast.makeText(appContext, "Playストア検索を開けませんでした", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun searchPlayStoreOnWeb(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        val encoded = Uri.encode("$trimmed Google Play アプリ")
+        try {
+            val browserIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://www.google.com/search?q=$encoded")
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            appContext.startActivity(browserIntent)
+        } catch (_: Exception) {
+            Toast.makeText(appContext, "Web検索を開けませんでした", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun openAccessibilitySettings() {
         try {
             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {

@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.myenvironment.launcher.AppContainer
 import com.myenvironment.launcher.accessibility.NotificationShadeService
+import com.myenvironment.launcher.core.launcher.MissingAppResolver
 import com.myenvironment.launcher.core.model.AppInfo
 import com.myenvironment.launcher.core.model.BackupSnapshotSummary
 import com.myenvironment.launcher.core.model.DiscoverMode
@@ -394,6 +395,123 @@ class LauncherViewModel(
 
     fun openPlayStoreForPackage(packageName: String) {
         appLauncher.openPlayStore(packageName)
+    }
+
+    fun searchPlayStoreForQuery(query: String) {
+        appLauncher.searchPlayStore(query)
+    }
+
+    fun searchPlayStoreOnWebForQuery(query: String) {
+        appLauncher.searchPlayStoreOnWeb(query)
+    }
+
+    /**
+     * 未インストールPlaceholderアイコンを、端末内（Pixel等）にインストール済みの該当・代替アプリにその位置のまま置き換える。
+     */
+    fun replaceMissingItemWithInstalledApp(missingItem: LayoutItem, targetApp: AppInfo) {
+        viewModelScope.launch {
+            if (missingItem.pageId == "dock") {
+                val existingDock = uiState.value.dockItems.find { it.id == missingItem.id }
+                if (existingDock != null) {
+                    layoutRepository.upsertDockItem(
+                        existingDock.copy(
+                            packageName = targetApp.packageName,
+                            activityName = targetApp.activityName,
+                            label = targetApp.label
+                        )
+                    )
+                }
+            } else {
+                val existingLayout = uiState.value.layoutItems.find { it.id == missingItem.id } ?: missingItem
+                layoutRepository.upsertLayoutItem(
+                    existingLayout.copy(
+                        packageName = targetApp.packageName,
+                        activityName = targetApp.activityName,
+                        label = targetApp.label
+                    )
+                )
+            }
+            overlayState.update {
+                it.copy(
+                    missingAppDialogTarget = null,
+                    statusMessage = "「${missingItem.label}」を端末内の「${targetApp.label}」に置き換えました"
+                )
+            }
+            Toast.makeText(
+                container.appContext,
+                "「${targetApp.label}」に置き換えました",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    /**
+     * ホーム画面およびDock上のすべての未インストールPlaceholderをスキャンし、
+     * Galaxy版Kindle (`com.amazon.kindleForSamsung` -> `com.amazon.kindle`) や
+     * Samsung標準アプリ (`com.sec.android.app.camera` -> Pixelカメラ等)、同名インストール済みアプリが
+     * 端末内に存在する場合は一括で自動紐付けする。
+     */
+    fun autoBindMissingAppsToInstalledApps() {
+        viewModelScope.launch {
+            val state = uiState.value
+            val installedPkgs = state.installedPackages
+            val installedApps = state.installedApps
+
+            var replacedCount = 0
+
+            // 1. ホーム画面の未インストール APP アイテムを照合
+            state.layoutItems
+                .filter { it.type == ItemType.APP && !installedPkgs.contains(it.packageName) }
+                .forEach { missingItem ->
+                    val resolution = MissingAppResolver.resolve(missingItem, installedApps)
+                    val bestCandidate = resolution.installedCandidates.firstOrNull { it.score >= 88 }
+                    if (bestCandidate != null) {
+                        layoutRepository.upsertLayoutItem(
+                            missingItem.copy(
+                                packageName = bestCandidate.appInfo.packageName,
+                                activityName = bestCandidate.appInfo.activityName,
+                                label = bestCandidate.appInfo.label
+                            )
+                        )
+                        replacedCount++
+                    }
+                }
+
+            // 2. Dockの未インストール APP アイテムを照合
+            state.dockItems
+                .filter { it.type == ItemType.APP && !installedPkgs.contains(it.packageName) }
+                .forEach { missingDock ->
+                    val syntheticItem = LayoutItem(
+                        id = missingDock.id,
+                        pageId = "dock",
+                        type = missingDock.type,
+                        packageName = missingDock.packageName,
+                        activityName = missingDock.activityName,
+                        label = missingDock.label,
+                        compact = GridPosition(0, 0)
+                    )
+                    val resolution = MissingAppResolver.resolve(syntheticItem, installedApps)
+                    val bestCandidate = resolution.installedCandidates.firstOrNull { it.score >= 88 }
+                    if (bestCandidate != null) {
+                        layoutRepository.upsertDockItem(
+                            missingDock.copy(
+                                packageName = bestCandidate.appInfo.packageName,
+                                activityName = bestCandidate.appInfo.activityName,
+                                label = bestCandidate.appInfo.label
+                            )
+                        )
+                        replacedCount++
+                    }
+                }
+
+            val msg = if (replacedCount > 0) {
+                "未インストール枠のうち ${replacedCount}個のアイコンを端末内のアプリ（Kindle・標準アプリ等）に自動紐付けしました"
+            } else {
+                "端末内に直接一致する代替アプリは見つかりませんでした（各アイコンをタップしてキーワード検索・ストア移動ができます）"
+            }
+            overlayState.update { it.copy(statusMessage = msg) }
+            Toast.makeText(container.appContext, msg, Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun dismissMissingAppDialog() {

@@ -4,6 +4,25 @@
 
 ---
 
+## [0.9.0] - 2026-09-30 (Build 9)
+
+### Added & Changed
+- **別端末（Galaxy等）からのバックアップ復元時に発生する未インストールアプリの「違い診断」＆「しつこく検索・解決」機能 (`MissingAppResolver` / `MissingAppDialog`)**:
+  - **なぜストアで直接ヒットしないかの原因診断表示**:
+    - `GALAXY_STORE_EDITION`: Galaxy Store 版パッケージ（例: Galaxy 版 Kindle `com.amazon.kindleForSamsung` など、末尾に `ForSamsung` / `.samsung` 等が付く別パッケージID）
+    - `SAMSUNG_SYSTEM_OR_EXCLUSIVE`: Galaxy (Samsung) 固有・標準アプリ（`com.sec.android.app.*` / `com.samsung.android.*`）
+    - `CARRIER_CUSTOM`: ドコモ・au・ソフトバンク等のキャリア固有パッケージ
+    - `GENERAL_APP`: 一般アプリ（地域限定・提供終了・パッケージID変更の可能性）
+  - **Google Play 正規パッケージIDへの自動変換オープン**:
+    - `com.amazon.kindleForSamsung` → `com.amazon.kindle` などの既知マッピングおよび `ForSamsung` / `.samsung` サフィックス除去ヒューリスティックにより、Google Play ストア上の正規パッケージID詳細ページを直接開けるボタンを追加。
+  - **キーワード＆パッケージ単語による「しつこいPlayストア検索・Web検索」**:
+    - パッケージID直接指定（`market://details?id=...`）でヒットしない場合でも、アプリ名やパッケージIDから抽出した検索キーワード候補チップ（編集可能）を使って **Playストア内キーワード検索 (`market://search?q=...&c=apps`)** および **Web (Google) 検索** をワンタップで実行可能に。
+  - **Pixel（現端末）内のインストール済み同名・代替アプリとの自動照合＆1タップ／一括置き換え**:
+    - Galaxy版 Kindle (`com.amazon.kindleForSamsung`) に対する Pixel 内の `Kindle (com.amazon.kindle)` や、Galaxy 標準カメラ・時計・電卓・ギャラリー等に対する Pixel 標準アプリ、または同名アプリが既に Pixel に入っている場合、ダイアログ上で **1タップでその位置のアイコンを端末内アプリに置き換え** 可能に。
+    - さらに `My Launcher 設定` に **「未インストール枠を端末内アプリ(Kindle・標準等)と一括紐付け」** ボタンを追加し、ホーム画面・Dock上の該当プレースホルダーを一括でPixel内アプリへ自動変換できるよう対応。
+
+---
+
 ## [0.8.0] - 2026-09-30 (Build 8)
 
 ### Fixed & Changed

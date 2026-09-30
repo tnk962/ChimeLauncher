@@ -34,6 +34,16 @@ interface AppLauncher {
     fun openPlayStore(packageName: String)
 
     /**
+     * Play Store アプリ内で指定キーワードのアプリ検索を開く (market://search?q=...&c=apps)
+     */
+    fun searchPlayStore(query: String)
+
+    /**
+     * ブラウザ (Google 検索) で指定キーワードの Google Play ストアページをしつこく検索する
+     */
+    fun searchPlayStoreOnWeb(query: String)
+
+    /**
      * システムのAccessibility設定画面を開く (仕様 7.2)
      */
     fun openAccessibilitySettings()

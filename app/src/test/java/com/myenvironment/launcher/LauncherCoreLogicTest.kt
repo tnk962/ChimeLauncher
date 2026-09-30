@@ -560,4 +560,82 @@ class LauncherCoreLogicTest {
             )
         )
     }
+
+    @Test
+    fun `MissingAppResolver diagnoses Galaxy Store Kindle and maps to Google Play Kindle and installed app`() {
+        val galaxyKindleItem = LayoutItem(
+            id = "missing_kindle",
+            pageId = LauncherPage.PAGE_ID_HOME,
+            type = ItemType.APP,
+            packageName = "com.amazon.kindleForSamsung",
+            activityName = "com.amazon.kindle.UpgradePage",
+            label = "Kindle",
+            compact = GridPosition(2, 2)
+        )
+        val installedOnPixel = listOf(
+            AppInfo(
+                packageName = "com.amazon.kindle",
+                activityName = "com.amazon.kindle.UpgradePage",
+                label = "Amazon Kindle"
+            ),
+            AppInfo(
+                packageName = "com.google.android.GoogleCamera",
+                activityName = "com.android.camera.CameraLauncher",
+                label = "カメラ"
+            )
+        )
+
+        val resolution = com.myenvironment.launcher.core.launcher.MissingAppResolver.resolve(
+            item = galaxyKindleItem,
+            installedApps = installedOnPixel
+        )
+
+        // 1. Galaxy版・別ストア版パッケージとして診断されること
+        assertEquals(
+            com.myenvironment.launcher.core.launcher.MissingPackageOrigin.GALAXY_STORE_EDITION,
+            resolution.origin
+        )
+        // 2. Google Play正規パッケージID (com.amazon.kindle) に変換されること
+        assertEquals("com.amazon.kindle", resolution.mappedPlayStorePackage)
+        // 3. Pixelにインストール済みの Amazon Kindle (com.amazon.kindle) が最優先候補として検出されること
+        assertTrue(resolution.installedCandidates.isNotEmpty())
+        assertEquals("com.amazon.kindle", resolution.installedCandidates.first().appInfo.packageName)
+        // 4. しつこく検索用のキーワード候補に Kindle が含まれること
+        assertTrue(resolution.suggestedSearchQueries.any { it.contains("Kindle", ignoreCase = true) })
+    }
+
+    @Test
+    fun `MissingAppResolver diagnoses Samsung system camera and suggests Pixel Camera equivalent`() {
+        val galaxyCameraItem = LayoutItem(
+            id = "missing_camera",
+            pageId = LauncherPage.PAGE_ID_HOME,
+            type = ItemType.APP,
+            packageName = "com.sec.android.app.camera",
+            activityName = "com.sec.android.app.camera.Camera",
+            label = "カメラ",
+            compact = GridPosition(0, 5)
+        )
+        val installedOnPixel = listOf(
+            AppInfo(
+                packageName = "com.google.android.GoogleCamera",
+                activityName = "com.android.camera.CameraLauncher",
+                label = "カメラ"
+            )
+        )
+
+        val resolution = com.myenvironment.launcher.core.launcher.MissingAppResolver.resolve(
+            item = galaxyCameraItem,
+            installedApps = installedOnPixel
+        )
+
+        assertEquals(
+            com.myenvironment.launcher.core.launcher.MissingPackageOrigin.SAMSUNG_SYSTEM_OR_EXCLUSIVE,
+            resolution.origin
+        )
+        assertTrue(resolution.installedCandidates.isNotEmpty())
+        assertEquals(
+            "com.google.android.GoogleCamera",
+            resolution.installedCandidates.first().appInfo.packageName
+        )
+    }
 }
