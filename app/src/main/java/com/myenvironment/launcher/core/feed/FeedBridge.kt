@@ -4,12 +4,14 @@ import androidx.compose.ui.graphics.ImageBitmap
 import com.myenvironment.launcher.core.model.DiscoverMode
 
 /**
- * Discover フィードのカテゴリ（v0.2.0 刷新: 旧4ジャンルを廃止し、新4ジャンル構成へ変更）
+ * Discover フィードのカテゴリ（v0.3.0: Googleニュースを排除し、AI・OpenAI / リゼロ・アニメ / はてブ中心の6ジャンル構成）
  *
- * 1. Google Discover : Googleのおすすめ・トップニュース記事
- * 2. はてブ 総合     : はてなブックマーク 総合ホットエントリー・新着RSS
- * 3. はてブ テクノロジー: はてなブックマーク テクノロジー(IT) ホットエントリー・新着RSS
- * 4. ビジネス・政治  : はてなブックマーク 政治と経済・社会 ＋ ビジネス・国内政治ニュースRSS
+ * 1. おすすめ (AI・リゼロ): XenoSpectrum・OpenAI/生成AI・リゼロ/アニメ・ITmedia AI+・GIGAZINE等の厳選フィード
+ * 2. AI・OpenAI         : XenoSpectrum・ITmedia AI+・Zenn(OpenAI/AI)・はてブ(OpenAI/生成AI)・GIGAZINE
+ * 3. リゼロ・アニメ      : はてブ(リゼロ/Re:ゼロ/ラノベ)・アニメ！アニメ！・コミックナタリー・はてブ(アニメとゲーム)・ねとらぼ・4Gamer
+ * 4. はてブ 総合         : はてなブックマーク 総合ホットエントリー・新着RSS
+ * 5. はてブ テクノロジー : はてなブックマーク テクノロジー(IT) ホットエントリー・新着RSS
+ * 6. ビジネス・政治      : はてなブックマーク 政治と経済・社会 ホットエントリー・新着RSS
  */
 enum class FeedCategory(
     val id: String,
@@ -17,17 +19,49 @@ enum class FeedCategory(
     val googleNewsTopicUrl: String,
     val rssUrls: List<String>
 ) {
-    GOOGLE_DISCOVER(
-        id = "google_discover_v2",
-        label = "Google Discover",
-        googleNewsTopicUrl = "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtcGhHZ0pLVUNnQVAB?hl=ja&gl=JP&ceid=JP:ja",
+    DISCOVER_CURATED(
+        id = "discover_curated_v3",
+        label = "おすすめ (AI・リゼロ)",
+        googleNewsTopicUrl = "",
         rssUrls = listOf(
-            "https://news.yahoo.co.jp/rss/topics/top-picks.xml",
-            "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja"
+            "https://xenospectrum.com/feed/",
+            "https://b.hatena.ne.jp/q/%E3%83%AA%E3%82%BC%E3%83%AD%20OR%20Re%3A%E3%82%BC%E3%83%AD%20OR%20%E7%95%B0%E4%B8%96%E7%95%8C%20OR%20%E3%82%A2%E3%83%8B%E3%83%A1?mode=rss&sort=recent&users=1",
+            "https://b.hatena.ne.jp/q/OpenAI%20OR%20ChatGPT%20OR%20Claude%20OR%20Gemini%20OR%20%E7%94%9F%E6%88%90AI?mode=rss&sort=recent&users=1",
+            "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml",
+            "https://animeanime.jp/rss/index.rdf",
+            "https://natalie.mu/comic/feed/news",
+            "https://gigazine.net/news/rss_2.0/"
+        )
+    ),
+    AI_OPENAI(
+        id = "ai_openai_v3",
+        label = "AI・OpenAI",
+        googleNewsTopicUrl = "",
+        rssUrls = listOf(
+            "https://xenospectrum.com/feed/",
+            "https://b.hatena.ne.jp/q/OpenAI%20OR%20ChatGPT%20OR%20GPT%20OR%20Claude%20OR%20Gemini%20OR%20LLM%20OR%20%E7%94%9F%E6%88%90AI?mode=rss&sort=recent&users=1",
+            "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml",
+            "https://zenn.dev/topics/openai/feed",
+            "https://zenn.dev/topics/ai/feed",
+            "https://gigazine.net/news/rss_2.0/"
+        )
+    ),
+    ANIME_REZERO(
+        id = "anime_rezero_v3",
+        label = "リゼロ・アニメ",
+        googleNewsTopicUrl = "",
+        rssUrls = listOf(
+            "https://b.hatena.ne.jp/q/%E3%83%AA%E3%82%BC%E3%83%AD%20OR%20Re%3A%E3%82%BC%E3%83%AD%20OR%20%E9%95%B7%E6%9C%88%E9%81%94%E5%B9%B3?mode=rss&sort=popular",
+            "https://b.hatena.ne.jp/q/%E3%83%AA%E3%82%BC%E3%83%AD%20OR%20Re%3A%E3%82%BC%E3%83%AD%20OR%20%E7%95%B0%E4%B8%96%E7%95%8C%20OR%20%E3%83%A9%E3%83%8E%E3%83%99?mode=rss&sort=recent&users=1",
+            "https://animeanime.jp/rss/index.rdf",
+            "https://natalie.mu/comic/feed/news",
+            "https://b.hatena.ne.jp/hotentry/game.rss",
+            "https://rss.itmedia.co.jp/rss/2.0/netlab.xml",
+            "https://www.4gamer.net/rss/index.xml"
         )
     ),
     HATENA_ALL(
-        id = "hatena_all_v2",
+        id = "hatena_all_v3",
         label = "はてブ 総合",
         googleNewsTopicUrl = "",
         rssUrls = listOf(
@@ -36,8 +70,8 @@ enum class FeedCategory(
         )
     ),
     HATENA_TECH(
-        id = "hatena_tech_v2",
-        label = "はてブ テクノロジー",
+        id = "hatena_tech_v3",
+        label = "はてブ IT",
         googleNewsTopicUrl = "",
         rssUrls = listOf(
             "https://b.hatena.ne.jp/hotentry/it.rss",
@@ -45,14 +79,13 @@ enum class FeedCategory(
         )
     ),
     BUSINESS_POLITICS(
-        id = "biz_politics_v2",
+        id = "biz_politics_v3",
         label = "ビジネス・政治",
         googleNewsTopicUrl = "",
         rssUrls = listOf(
             "https://b.hatena.ne.jp/hotentry/economics.rss",
             "https://b.hatena.ne.jp/hotentry/social.rss",
-            "https://news.yahoo.co.jp/rss/topics/business.xml",
-            "https://news.yahoo.co.jp/rss/topics/domestic.xml"
+            "https://b.hatena.ne.jp/entrylist/economics.rss"
         )
     )
 }

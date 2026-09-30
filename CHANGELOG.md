@@ -4,6 +4,24 @@
 
 ---
 
+## [0.3.0] - 2026-09-30 (Build 3)
+
+### Added & Changed
+- **Discover フィードから Googleニュース（新聞社ヘッドライン）を排除し、興味関心特化の6ジャンルへ拡充**:
+  - 一般紙の政治・事件ヘッドライン（`news.google.com`）を廃止し、主にチェックしたい **AI・OpenAI（XenoSpectrum等）** や **リゼロ（Re:ゼロから始める異世界生活）・アニメ・ラノベ**、および **はてなブックマーク** の記事を直接収集・表示する6ジャンル構成に刷新：
+    1. **おすすめ (AI・リゼロ)**: `xenospectrum.com`、はてブ「リゼロ / Re:ゼロ / 異世界 / アニメ」、はてブ「OpenAI / ChatGPT / Claude / Gemini / 生成AI」、`ITmedia AI+`、`アニメ！アニメ！`、`コミックナタリー`、`GIGAZINE` を横断統合
+    2. **AI・OpenAI**: `xenospectrum.com`、はてブ「OpenAI / ChatGPT / LLM / 生成AI」新着、`ITmedia AI+`、`Zenn (OpenAI / AI トピック)`、`GIGAZINE`
+    3. **リゼロ・アニメ**: はてブ「リゼロ / Re:ゼロ / 長月達平」人気・新着、`アニメ！アニメ！`、`コミックナタリー`、はてブ「アニメとゲーム」人気、`ねとらぼ`、`4Gamer.net`
+    4. **はてブ 総合**: はてなブックマーク 総合ホットエントリー＆新着エントリー RSS
+    5. **はてブ IT**: はてなブックマーク テクノロジー（IT）ホットエントリー＆新着エントリー RSS
+    6. **ビジネス・政治**: はてなブックマーク 政治と経済・社会 ホットエントリー＆新着エントリー RSS
+- **Atom / RDF / RSS 2.0 マルチフォーマット解析とメディア名表示の強化**:
+  - `DefaultFeedBridge` にて Atom フィード（`Zenn`、`コミックナタリー` 等の `<entry>` / `<updated>` / `<content>` / `rel="enclosure"`）の解析を強化し、`xenospectrum.com`・`アニメ！アニメ！`・`コミックナタリー`・`ITmedia`・`Zenn`・`GIGAZINE` などの配信元名が記事タイトルを削らず正確に表示されるよう改善。
+- **Google App 起動処理の改善**:
+  - `openGoogleDiscoverApp()` のフォールバック先から `news.google.com` を除外し、Google アプリ本体（`com.google.android.googlequicksearchbox`）を優先起動するよう修正。
+
+---
+
 ## [0.2.0] - 2026-09-30 (Build 2)
 
 ### Added

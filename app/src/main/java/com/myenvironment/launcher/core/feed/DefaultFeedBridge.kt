@@ -112,19 +112,7 @@ class DefaultFeedBridge(
         } catch (_: Exception) {
         }
 
-        // 2. 明示的 ComponentName (SearchActivity) を指定して起動
-        try {
-            val explicitIntent = Intent(Intent.ACTION_MAIN).apply {
-                component = ComponentName(GOOGLE_APP_PACKAGE, GOOGLE_SEARCH_ACTIVITY)
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-            }
-            appContext.startActivity(explicitIntent)
-            return true
-        } catch (_: Exception) {
-        }
-
-        // 3. PackageManager.getLaunchIntentForPackage で起動
+        // 2. PackageManager.getLaunchIntentForPackage で起動
         try {
             val launchIntent = packageManager.getLaunchIntentForPackage(GOOGLE_APP_PACKAGE)?.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
@@ -136,8 +124,31 @@ class DefaultFeedBridge(
         } catch (_: Exception) {
         }
 
-        // 4. Google News Web へフォールバック
-        return openArticleUrl("https://news.google.com/?hl=ja&gl=JP&ceid=JP:ja")
+        // 3. 明示的 ComponentName (SearchActivity) を指定して起動
+        try {
+            val explicitIntent = Intent(Intent.ACTION_MAIN).apply {
+                component = ComponentName(GOOGLE_APP_PACKAGE, GOOGLE_SEARCH_ACTIVITY)
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            }
+            appContext.startActivity(explicitIntent)
+            return true
+        } catch (_: Exception) {
+        }
+
+        // 4. Google アプリの GOOGLE_SEARCH アクションで起動
+        try {
+            val searchIntent = Intent("com.google.android.googlequicksearchbox.GOOGLE_SEARCH").apply {
+                setPackage(GOOGLE_APP_PACKAGE)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            appContext.startActivity(searchIntent)
+            return true
+        } catch (_: Exception) {
+        }
+
+        // 5. Google トップページへフォールバック（Googleニュースには飛ばさない）
+        return openArticleUrl("https://www.google.com/")
     }
 
     override fun openArticleUrl(url: String): Boolean {
@@ -403,6 +414,7 @@ class DefaultFeedBridge(
 
         val articles = mutableListOf<DiscoverArticle>()
         var insideItem = false
+        var channelTitle = ""
         var currentTitle = ""
         var currentLink = ""
         var currentSource = ""
@@ -435,29 +447,38 @@ class DefaultFeedBridge(
                         currentEncodedHtml = ""
                         currentImageUrl = null
                         currentBookmarkCount = ""
+                    } else if (!insideItem && localTag == "title" && channelTitle.isBlank()) {
+                        channelTitle = parser.nextText().trim()
                     } else if (insideItem) {
                         when {
                             localTag == "title" -> currentTitle = parser.nextText().trim()
                             localTag == "link" -> {
+                                val rel = parser.getAttributeValue(null, "rel")?.lowercase()
+                                val type = parser.getAttributeValue(null, "type")?.lowercase()
                                 val href = parser.getAttributeValue(null, "href")
                                 val text = parser.nextText().trim()
-                                if (currentLink.isBlank()) {
+                                if (rel == "enclosure" || type?.startsWith("image/") == true) {
+                                    val candidateImg = href ?: text
+                                    if (currentImageUrl == null && isValidArticleImageUrl(candidateImg)) {
+                                        currentImageUrl = candidateImg
+                                    }
+                                } else if (currentLink.isBlank()) {
                                     currentLink = text.ifBlank { href.orEmpty() }
                                 }
                             }
                             localTag == "source" -> currentSource = parser.nextText().trim()
-                            localTag == "pubdate" || fullTag == "dc:date" || localTag == "date" || localTag == "published" -> {
+                            localTag == "pubdate" || fullTag == "dc:date" || localTag == "date" || localTag == "published" || localTag == "updated" -> {
                                 val d = parser.nextText().trim()
                                 if (currentPubDate.isBlank()) {
                                     currentPubDate = d
                                 }
                             }
-                            localTag == "description" || localTag == "summary" -> {
+                            localTag == "description" || localTag == "summary" || localTag == "content" -> {
                                 val raw = parser.nextText().trim()
                                 if (currentImageUrl == null) {
                                     extractFirstImgUrl(raw)?.let { currentImageUrl = it }
                                 }
-                                if (raw.isNotBlank()) {
+                                if (raw.isNotBlank() && currentDescription.isBlank()) {
                                     currentDescription = raw
                                 }
                             }
@@ -492,9 +513,14 @@ class DefaultFeedBridge(
                     if ((localTag == "item" || localTag == "entry") && insideItem) {
                         insideItem = false
                         if (currentTitle.isNotBlank() && currentLink.isNotBlank()) {
+                            val effectiveRssSource = when {
+                                currentSource.isNotBlank() -> currentSource
+                                channelTitle.isNotBlank() && !channelTitle.startsWith("はてなブックマーク") -> channelTitle
+                                else -> ""
+                            }
                             val (cleanTitle, extractedSource) = splitTitleAndSource(
                                 rawTitle = currentTitle,
-                                rssSource = currentSource,
+                                rssSource = effectiveRssSource,
                                 articleUrl = currentLink
                             )
                             val rawSummarySource = currentDescription.ifBlank { currentEncodedHtml }
@@ -577,35 +603,41 @@ class DefaultFeedBridge(
     }
 
     private fun splitTitleAndSource(rawTitle: String, rssSource: String, articleUrl: String): Pair<String, String> {
-        val lastDash = rawTitle.lastIndexOf(" - ")
-        if (lastDash > 0 && lastDash < rawTitle.length - 2) {
-            val mainTitle = rawTitle.substring(0, lastDash).trim()
-            val tailSource = rawTitle.substring(lastDash + 3).trim()
-            return mainTitle to (rssSource.ifBlank { tailSource })
-        }
-        // 末尾の「（ロイター）」「（時事通信）」などから配信元を補助抽出
-        if (rawTitle.endsWith("）") && rawTitle.contains("（")) {
-            val openIdx = rawTitle.lastIndexOf("（")
-            if (openIdx > 4) {
-                val mainTitle = rawTitle.substring(0, openIdx).trim()
-                val parenSource = rawTitle.substring(openIdx + 1, rawTitle.length - 1).trim()
-                val combinedSource = if (rssSource.isNotBlank() && rssSource != parenSource) {
-                    "$parenSource ($rssSource)"
-                } else {
-                    parenSource.ifBlank { rssSource }
-                }
-                return mainTitle to combinedSource
+        if (articleUrl.contains("news.google.com")) {
+            val lastDash = rawTitle.lastIndexOf(" - ")
+            if (lastDash > 0 && lastDash < rawTitle.length - 2) {
+                val mainTitle = rawTitle.substring(0, lastDash).trim()
+                val tailSource = rawTitle.substring(lastDash + 3).trim()
+                return mainTitle to (rssSource.ifBlank { tailSource })
             }
         }
         val host = runCatching {
             URI(articleUrl).host?.removePrefix("www.")
         }.getOrNull().orEmpty()
-        val fallbackSource = when {
+        val friendlyHost = when {
+            host.contains("xenospectrum.com") -> "xenospectrum.com"
+            host.contains("itmedia.co.jp") -> "ITmedia"
+            host.contains("zenn.dev") -> "Zenn"
+            host.contains("gigazine.net") -> "GIGAZINE"
+            host.contains("animeanime.jp") -> "アニメ！アニメ！"
+            host.contains("natalie.mu") -> "コミックナタリー"
+            host.contains("4gamer.net") -> "4Gamer.net"
+            host.contains("dengekionline.com") -> "電撃オンライン"
+            host.contains("famitsu.com") -> "ファミ通.com"
+            host.contains("automaton-media.com") -> "AUTOMATON"
+            host.contains("qiita.com") -> "Qiita"
+            host.contains("note.com") -> "note"
+            host.contains("re-zero-anime.jp") -> "Re:ゼロ公式"
             host.contains("news.yahoo.co.jp") -> "Yahoo!ニュース"
             host.isNotBlank() -> host
-            else -> "Google News"
+            else -> "Discover"
         }
-        return rawTitle to rssSource.ifBlank { fallbackSource }
+        val finalSource = when {
+            host.contains("xenospectrum.com") -> "xenospectrum.com"
+            rssSource.isNotBlank() && rssSource.length <= 28 -> rssSource
+            else -> friendlyHost
+        }
+        return rawTitle to finalSource
     }
 
     private fun formatPubDate(rawDate: String): String {

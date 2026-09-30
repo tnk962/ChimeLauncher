@@ -64,9 +64,9 @@ import com.myenvironment.launcher.core.model.LauncherAction
 import kotlinx.coroutines.launch
 
 /**
- * Page -2: Google Discover & はてなブックマーク 統合フィードページ (仕様 27, 28, 29 / v0.2.0 刷新)
+ * Page -2: Discover & はてなブックマーク 統合フィードページ (仕様 27, 28, 29 / v0.3.0)
  *
- * - 4つのジャンル（1: Google Discover / 2: はてブ 総合 / 3: はてブ テクノロジー / 4: ビジネス・政治）を画面下部チップで切り替え可能。
+ * - Googleニュース（新聞系見出し）を排除し、AI・OpenAI（XenoSpectrum等）やリゼロ・アニメ・はてブを中心とした6ジャンルを下部チップで切り替え可能。
  * - 各記事カードにサムネイル画像と要約スニペットを表示し、どんな記事か一目で分かるUI。
  */
 @Composable
@@ -79,7 +79,7 @@ fun DiscoverPage(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var selectedCategory by remember { mutableStateOf(FeedCategory.GOOGLE_DISCOVER) }
+    var selectedCategory by remember { mutableStateOf(FeedCategory.DISCOVER_CURATED) }
     val articlesCache = remember { mutableStateMapOf<FeedCategory, List<DiscoverArticle>>() }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }

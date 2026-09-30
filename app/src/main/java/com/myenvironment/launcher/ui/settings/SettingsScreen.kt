@@ -673,7 +673,7 @@ fun SettingsScreen(
                         color = Color(0x33FFFFFF)
                     )
                     Text(
-                        text = "最新更新 (v0.2.0): Discover 4ジャンル刷新（Google Discover / はてブ 総合 / はてブ テクノロジー / ビジネス・政治）＋ 既存キャッシュの自動クリア対応",
+                        text = "最新更新 (v0.3.0): Discover から Googleニュースを排除し、AI・OpenAI（XenoSpectrum等）や リゼロ・アニメ・はてブ中心の6ジャンル構成へ刷新",
                         color = Color(0xFF9AA0A6),
                         fontSize = 11.sp,
                         lineHeight = 16.sp
