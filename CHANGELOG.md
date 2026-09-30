@@ -4,6 +4,16 @@
 
 ---
 
+## [1.2.0] - 2026-10-01 (Build 14)
+
+- Google Discover連携をmainへ統合し、本体とCompanionの2 APKを正式公開。
+- Googleの画面生成にActivityの正しいトークンを渡し、preview.1の「応答がありません」・BadTokenExceptionを修正。
+- SC-56F / Android 16 / Google App 17.60.15.ve.arm64のカバー画面で表示・開閉・再表示・ホーム復帰を確認。
+- アプリ内更新がCompanionを本体と誤認しないようAPK選択を限定し、回帰テストを追加。
+- 動作しないpreview.1は非公開へ取り下げ。全端末やFold開閉の互換性は未保証。
+
+---
+
 ## [1.2.0-discover-preview.1] - 2026-10-01 (Build 12)
 
 - 独自フィードのさらに左にGoogle Discover overlayを接続するChime Discover Companionを追加。

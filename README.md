@@ -1,6 +1,6 @@
-# Chime Launcher (v1.2.0 Discover preview)
+# Chime Launcher (v1.2.0)
 
-Google Discoverの連続スワイプ対応をこのブランチで開発しています。[プレビューリリース](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.2.0-discover-preview.1)から本体とCompanionの2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。Google App実機連携は確認待ちです。
+Google Discoverの連続スワイプに対応しました。[正式版v1.2.0](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.2.0)から本体とGoogleDiscoverCompanionの2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。SC-56F / Android 16のカバー画面でDiscoverの開閉・再表示・ホーム復帰を確認済みです。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
 
 > **Chimeは通知しない。気づかせる。**  
 > *Chime Moments are ambient, not interruptive.*
@@ -15,10 +15,10 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ### 1. 初回 APK をダウンロードする
 1. このリポジトリの **[Releases（最新リリース）](../../releases/latest)** ページを開きます。
-2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.1.0.apk`** をタップしてダウンロードします。
+2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.2.0.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`GoogleDiscoverCompanion-v1.2.0.apk`** も導入してください。
 
 ### 2. Android 端末にインストールする
-1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリから **`ChimeLauncher-v1.1.0.apk`** を開きます。
+1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリから **`ChimeLauncher-v1.2.0.apk`** を開きます。
 2. 初回のみ「この提供元の不明なアプリをインストールしますか？」と表示された場合は、**「設定」→「この提供元のアプリを許可」** を ON にして「インストール」をタップします。
 3. **Google Play プロテクトの確認が表示された場合**:
    - 個人開発の配布用 APK のため、「Play プロテクトによりブロックされました」や「スキャンしますか？」と表示されることがあります。

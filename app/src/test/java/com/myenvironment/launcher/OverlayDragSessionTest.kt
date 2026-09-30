@@ -6,6 +6,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OverlayDragSessionTest {
+    @Test fun `updater selects launcher even when companion is first`() {
+        val release = AppUpdateParser.parseLatestReleaseJson("""{"tag_name":"v1.2.0","assets":[
+            {"name":"ChimeDiscoverCompanion-v1.2.0.apk","browser_download_url":"https://example.com/companion.apk"},
+            {"name":"ChimeLauncher-v1.2.0.apk","browser_download_url":"https://example.com/launcher.apk"}
+        ]}""")!!
+        assertEquals("ChimeLauncher-v1.2.0.apk", release.apkFileName)
+        assertEquals("https://example.com/launcher.apk", release.apkDownloadUrl)
+    }
+
+    @Test fun `updater never substitutes companion when launcher is missing`() {
+        val release = AppUpdateParser.parseLatestReleaseJson("""{"tag_name":"v1.2.0","assets":[
+            {"name":"GoogleDiscoverCompanion-v1.2.0.apk","browser_download_url":"https://example.com/companion.apk"}
+        ]}""")!!
+        assertNull(release.apkDownloadUrl)
+        assertNull(release.apkFileName)
+    }
+
     @Test fun `preview can upgrade to equal numbered stable without offering a downgrade`() {
         assertTrue(AppUpdateParser.isNewerVersion("1.2.0-discover-preview.1", "v1.2.0"))
         assertFalse(AppUpdateParser.isNewerVersion("1.2.0-discover-preview.1", "v1.1.0"))

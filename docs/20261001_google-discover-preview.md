@@ -1,13 +1,13 @@
-# Google Discover Companion プレビュー
+# Google Discover Companion (v1.2.0)
 
-このブランチでは、Home → 全アプリ → 独自フィードというページ順を保ち、独自フィードのさらに左にGoogle AppのDiscover overlayを接続します。右へ指を動かすと、指の移動量をGoogle Appへ渡して画面を開きます。外部のGoogle App Activityを自動起動する処理とは別です。
+Home → 全アプリ → 独自フィードというページ順を保ち、独自フィードのさらに左にGoogle AppのDiscover overlayを接続します。右へ指を動かすと、指の移動量をGoogle Appへ渡して画面を開きます。外部のGoogle App Activityを自動起動する処理とは別です。
 
 ## 導入
 
 同じリリースの次の2つのAPKをインストールしてください。
 
-- `ChimeLauncher-v1.2.0-discover-preview.1.apk`
-- `ChimeDiscoverCompanion-v1.2.0-discover-preview.1.apk`
+- `ChimeLauncher-v1.2.0.apk`
+- `GoogleDiscoverCompanion-v1.2.0.apk` (アプリ名はChime Discover Companion)
 
 v1.0.0・v1.1.0公開APKと同じ証明書で本体を署名しています。既存公開版の上に更新できます。違う署名の手元ビルドを使っている場合は、先にJSONバックアップを保存してから更新方法を判断してください。署名違いのAPKで既存アプリを上書きすることはできません。
 
@@ -54,7 +54,7 @@ CIは2つのAPKとテストをビルドします。別途管理する鍵で自�
 
 ## 検証範囲
 
-ビルド、既存ユニットテスト、overlayドラッグ判定テスト、APKの署名・Manifestを確認して公開するプレビューです。Google Appをインストールした実機が接続されていないため、Google Discoverの表示、スワイプの追従、戻る操作、Fold開閉の実機動作は未検証です。Nova/Pixelとの完全一致を保証するリリースではありません。
+Releaseビルド、ユニットテスト、overlayドラッグ判定、APKの署名・Manifestを確認しています。SC-56F / Android 16 / Google App 17.60.15.ve.arm64のカバー画面でDiscoverの表示、スワイプによる開閉、再表示、HOME復帰を確認しました。[画面トークン修正の検証記録](20261001_discover-window-token-fix.md)を参照してください。Fold開閉、回転、他端末・他Google App版は未検証です。Nova/Pixelとの完全一致を保証するリリースではありません。
 
 実機で確認する項目: 2APK導入、標準HOME指定、接続status、開閉・途中で戻す操作、記事タップ後のHOME復帰、戻る・Home、画面消灯・復帰、回転・Fold開閉、Google/Companionの更新・force-stop、CompanionなしでもRSSページが利用できること。
 
