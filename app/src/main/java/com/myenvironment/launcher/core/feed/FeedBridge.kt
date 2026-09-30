@@ -4,7 +4,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import com.myenvironment.launcher.core.model.DiscoverMode
 
 /**
- * Discover フィードのカテゴリ
+ * Discover フィードのカテゴリ（v0.2.0 刷新: 旧4ジャンルを廃止し、新4ジャンル構成へ変更）
+ *
+ * 1. Google Discover : Googleのおすすめ・トップニュース記事
+ * 2. はてブ 総合     : はてなブックマーク 総合ホットエントリー・新着RSS
+ * 3. はてブ テクノロジー: はてなブックマーク テクノロジー(IT) ホットエントリー・新着RSS
+ * 4. ビジネス・政治  : はてなブックマーク 政治と経済・社会 ＋ ビジネス・国内政治ニュースRSS
  */
 enum class FeedCategory(
     val id: String,
@@ -12,40 +17,42 @@ enum class FeedCategory(
     val googleNewsTopicUrl: String,
     val rssUrls: List<String>
 ) {
-    TOP(
-        id = "top",
-        label = "おすすめ",
+    GOOGLE_DISCOVER(
+        id = "google_discover_v2",
+        label = "Google Discover",
         googleNewsTopicUrl = "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtcGhHZ0pLVUNnQVAB?hl=ja&gl=JP&ceid=JP:ja",
         rssUrls = listOf(
             "https://news.yahoo.co.jp/rss/topics/top-picks.xml",
             "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja"
         )
     ),
-    TECHNOLOGY(
-        id = "tech",
-        label = "テクノロジー",
-        googleNewsTopicUrl = "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcGhHZ0pLVUNnQVAB?hl=ja&gl=JP&ceid=JP:ja",
+    HATENA_ALL(
+        id = "hatena_all_v2",
+        label = "はてブ 総合",
+        googleNewsTopicUrl = "",
         rssUrls = listOf(
-            "https://news.yahoo.co.jp/rss/topics/it.xml",
-            "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=ja&gl=JP&ceid=JP:ja"
+            "https://b.hatena.ne.jp/hotentry.rss",
+            "https://b.hatena.ne.jp/entrylist.rss"
         )
     ),
-    BUSINESS(
-        id = "business",
-        label = "ビジネス",
-        googleNewsTopicUrl = "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtcGhHZ0pLVUNnQVAB?hl=ja&gl=JP&ceid=JP:ja",
+    HATENA_TECH(
+        id = "hatena_tech_v2",
+        label = "はてブ テクノロジー",
+        googleNewsTopicUrl = "",
         rssUrls = listOf(
+            "https://b.hatena.ne.jp/hotentry/it.rss",
+            "https://b.hatena.ne.jp/entrylist/it.rss"
+        )
+    ),
+    BUSINESS_POLITICS(
+        id = "biz_politics_v2",
+        label = "ビジネス・政治",
+        googleNewsTopicUrl = "",
+        rssUrls = listOf(
+            "https://b.hatena.ne.jp/hotentry/economics.rss",
+            "https://b.hatena.ne.jp/hotentry/social.rss",
             "https://news.yahoo.co.jp/rss/topics/business.xml",
-            "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ja&gl=JP&ceid=JP:ja"
-        )
-    ),
-    SCIENCE(
-        id = "science",
-        label = "サイエンス",
-        googleNewsTopicUrl = "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFp0Y1RjU0FtcGhHZ0pLVUNnQVAB?hl=ja&gl=JP&ceid=JP:ja",
-        rssUrls = listOf(
-            "https://news.yahoo.co.jp/rss/topics/science.xml",
-            "https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=ja&gl=JP&ceid=JP:ja"
+            "https://news.yahoo.co.jp/rss/topics/domestic.xml"
         )
     )
 }
@@ -93,6 +100,9 @@ interface FeedBridge {
 
     /** 記事のOGP要約テキスト（og:description）を非同期取得してキャッシュに格納する */
     suspend fun loadArticleSummary(articleUrl: String): String?
+
+    /** メモリ内の全フィード画像・OGPメタデータキャッシュを完全にクリアする */
+    fun clearCache()
 
     /** 左端ページへ到達した際のアクション（設定されたDiscoverModeに応じた処理） */
     fun onLeftmostPageReached(mode: DiscoverMode): Boolean

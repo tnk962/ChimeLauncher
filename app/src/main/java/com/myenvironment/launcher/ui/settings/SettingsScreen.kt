@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.myenvironment.launcher.BuildConfig
 import com.myenvironment.launcher.accessibility.NotificationShadeService
 import com.myenvironment.launcher.core.model.BackupSnapshotSummary
 import com.myenvironment.launcher.core.model.DiscoverMode
@@ -150,12 +151,19 @@ fun SettingsScreen(
                         }
                         Spacer(modifier = Modifier.width(4.dp))
                     }
-                    Text(
-                        text = "My Launcher 設定",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Text(
+                            text = "My Launcher 設定",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE} • ${BuildConfig.BUILD_TIMESTAMP})",
+                            color = Color(0xFF9AA0A6),
+                            fontSize = 11.sp
+                        )
+                    }
                 }
 
                 if (isEmbeddedPage) {
@@ -631,6 +639,45 @@ fun SettingsScreen(
                     Icon(Icons.Default.BugReport, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("未インストールPlaceholder (Spotify例) をHOMEに追加")
+                }
+            }
+
+            // 8. バージョン・ビルド情報（最下部）
+            SettingsSectionCard(title = "バージョン・ビルド情報") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("アプリバージョン", color = Color(0xFFBDC1C6), fontSize = 13.sp)
+                        Text(
+                            text = "v${BuildConfig.VERSION_NAME} (Code: ${BuildConfig.VERSION_CODE})",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("ビルド日時", color = Color(0xFFBDC1C6), fontSize = 13.sp)
+                        Text(
+                            text = BuildConfig.BUILD_TIMESTAMP,
+                            color = Color.White,
+                            fontSize = 13.sp
+                        )
+                    }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = Color(0x33FFFFFF)
+                    )
+                    Text(
+                        text = "最新更新 (v0.2.0): Discover 4ジャンル刷新（Google Discover / はてブ 総合 / はてブ テクノロジー / ビジネス・政治）＋ 既存キャッシュの自動クリア対応",
+                        color = Color(0xFF9AA0A6),
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
                 }
             }
 

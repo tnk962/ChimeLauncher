@@ -190,22 +190,28 @@ class DefaultFeedBridge(
                         }
                     }
 
-                    // Google News トピック記事を主軸にしつつ補助フィードを統合して重複を排除
+                    // Google News トピックがあるカテゴリはそれを主軸にし、RSSのみのカテゴリ（はてブ総合/IT/ビジネス・政治）は均等インターリーブ統合
                     val merged = mutableListOf<DiscoverArticle>()
                     if (allLists.size == 1) {
                         merged.addAll(allLists[0])
-                    } else if (allLists.isNotEmpty()) {
+                    } else if (googleTopicArticles.isNotEmpty() && allLists.isNotEmpty()) {
                         val primary = allLists[0]
                         val secondaryLists = allLists.drop(1)
                         var secIdx = 0
                         for (i in primary.indices) {
                             merged.add(primary[i])
-                            // 3件ごとに補助フィードの記事を1件差し込む
                             if (i % 3 == 2 && secondaryLists.isNotEmpty()) {
                                 for (sList in secondaryLists) {
                                     sList.getOrNull(secIdx)?.let { merged.add(it) }
                                 }
                                 secIdx++
+                            }
+                        }
+                    } else if (allLists.isNotEmpty()) {
+                        val maxLen = allLists.maxOfOrNull { it.size } ?: 0
+                        for (i in 0 until maxLen) {
+                            for (list in allLists) {
+                                list.getOrNull(i)?.let { merged.add(it) }
                             }
                         }
                     }
@@ -404,6 +410,7 @@ class DefaultFeedBridge(
         var currentDescription = ""
         var currentEncodedHtml = ""
         var currentImageUrl: String? = null
+        var currentBookmarkCount = ""
 
         var eventType = parser.eventType
         while (eventType != XmlPullParser.END_DOCUMENT) {
@@ -427,6 +434,7 @@ class DefaultFeedBridge(
                         currentDescription = ""
                         currentEncodedHtml = ""
                         currentImageUrl = null
+                        currentBookmarkCount = ""
                     } else if (insideItem) {
                         when {
                             localTag == "title" -> currentTitle = parser.nextText().trim()
@@ -460,6 +468,15 @@ class DefaultFeedBridge(
                                 }
                                 currentEncodedHtml = raw
                             }
+                            fullTag == "hatena:imageurl" || localTag == "imageurl" -> {
+                                val img = parser.nextText().trim()
+                                if (isValidArticleImageUrl(img)) {
+                                    currentImageUrl = img
+                                }
+                            }
+                            fullTag == "hatena:bookmarkcount" || localTag == "bookmarkcount" -> {
+                                currentBookmarkCount = parser.nextText().trim()
+                            }
                             fullTag == "media:content" || fullTag == "media:thumbnail" || localTag == "enclosure" || localTag == "thumbnail" -> {
                                 val attrUrl = parser.getAttributeValue(null, "url")
                                 if (!attrUrl.isNullOrBlank() && isValidArticleImageUrl(attrUrl)) {
@@ -482,13 +499,18 @@ class DefaultFeedBridge(
                             )
                             val rawSummarySource = currentDescription.ifBlank { currentEncodedHtml }
                             val cleanSummary = cleanHtmlSummary(rawSummarySource, cleanTitle, extractedSource)
+                            val formattedSource = if (currentBookmarkCount.isNotBlank() && currentBookmarkCount != "0") {
+                                "$extractedSource • ${currentBookmarkCount} users"
+                            } else {
+                                extractedSource
+                            }
 
                             articles.add(
                                 DiscoverArticle(
                                     id = UUID.nameUUIDFromBytes(currentLink.toByteArray()).toString(),
                                     title = cleanTitle,
                                     summary = cleanSummary,
-                                    sourceName = extractedSource,
+                                    sourceName = formattedSource,
                                     publishedAt = formatPubDate(currentPubDate),
                                     url = currentLink,
                                     imageUrl = currentImageUrl
@@ -654,6 +676,15 @@ class DefaultFeedBridge(
     override suspend fun loadArticleSummary(articleUrl: String): String? {
         return withContext(Dispatchers.IO) {
             resolveOgpMetadata(articleUrl)?.description?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    override fun clearCache() {
+        synchronized(imageCache) {
+            imageCache.evictAll()
+        }
+        synchronized(ogpMetadataCache) {
+            ogpMetadataCache.evictAll()
         }
     }
 

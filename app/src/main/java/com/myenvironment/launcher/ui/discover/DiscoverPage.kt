@@ -64,10 +64,10 @@ import com.myenvironment.launcher.core.model.LauncherAction
 import kotlinx.coroutines.launch
 
 /**
- * Page -2: Google Discover ページ (仕様 27, 28, 29)
+ * Page -2: Google Discover & はてなブックマーク 統合フィードページ (仕様 27, 28, 29 / v0.2.0 刷新)
  *
- * - 各記事カードにサムネイル画像（あれば表示）と記事の要約スニペットを表示し、どんな記事か一目で分かるUI。
- * - ジャンル選択バー（おすすめ・テクノロジー・ビジネス・サイエンス）は親指が届きやすい画面下部に配置。
+ * - 4つのジャンル（1: Google Discover / 2: はてブ 総合 / 3: はてブ テクノロジー / 4: ビジネス・政治）を画面下部チップで切り替え可能。
+ * - 各記事カードにサムネイル画像と要約スニペットを表示し、どんな記事か一目で分かるUI。
  */
 @Composable
 fun DiscoverPage(
@@ -79,14 +79,18 @@ fun DiscoverPage(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var selectedCategory by remember { mutableStateOf(FeedCategory.TOP) }
+    var selectedCategory by remember { mutableStateOf(FeedCategory.GOOGLE_DISCOVER) }
     val articlesCache = remember { mutableStateMapOf<FeedCategory, List<DiscoverArticle>>() }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showModeDialog by remember { mutableStateOf(false) }
+    var hasClearedInitialCache by remember { mutableStateOf(false) }
 
     fun loadCategory(category: FeedCategory, forceRefresh: Boolean = false) {
-        if (!forceRefresh && articlesCache.containsKey(category)) {
+        if (forceRefresh) {
+            feedBridge.clearCache()
+            articlesCache.remove(category)
+        } else if (articlesCache.containsKey(category)) {
             errorMessage = null
             return
         }
@@ -107,6 +111,11 @@ fun DiscoverPage(
     }
 
     LaunchedEffect(selectedCategory) {
+        if (!hasClearedInitialCache) {
+            feedBridge.clearCache()
+            articlesCache.clear()
+            hasClearedInitialCache = true
+        }
         loadCategory(selectedCategory, forceRefresh = false)
     }
 
@@ -170,7 +179,7 @@ fun DiscoverPage(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "フィードを更新",
+                        contentDescription = "キャッシュをクリアして更新",
                         tint = Color.White,
                         modifier = Modifier.size(18.dp)
                     )
