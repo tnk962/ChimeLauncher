@@ -673,7 +673,7 @@ fun SettingsScreen(
                         color = Color(0x33FFFFFF)
                     )
                     Text(
-                        text = "最新更新 (v0.4.0): 折りたたみ展開時の左右2ページ見開きモードにおいて、Discoverページと設定ページを1ページ全画面表示固定に変更",
+                        text = "最新更新 (v0.5.0): Discoverページからさらに左端の行き止まり方向へスワイプした際にGoogleアプリ（Discover）を自動起動する固定動作を追加",
                         color = Color(0xFF9AA0A6),
                         fontSize = 11.sp,
                         lineHeight = 16.sp

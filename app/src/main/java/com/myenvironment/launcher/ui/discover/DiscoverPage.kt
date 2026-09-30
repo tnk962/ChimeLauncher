@@ -38,6 +38,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,12 +47,15 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,17 +67,20 @@ import com.myenvironment.launcher.core.feed.FeedCategory
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.LauncherAction
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
- * Page -2: Discover & はてなブックマーク 統合フィードページ (仕様 27, 28, 29 / v0.3.0)
+ * Page -2: Discover & はてなブックマーク 統合フィードページ (仕様 27, 28, 29 / v0.5.0)
  *
  * - Googleニュース（新聞系見出し）を排除し、AI・OpenAI（XenoSpectrum等）やリゼロ・アニメ・はてブを中心とした6ジャンルを下部チップで切り替え可能。
  * - 各記事カードにサムネイル画像と要約スニペットを表示し、どんな記事か一目で分かるUI。
+ * - 左端のDiscoverページ表示中に、さらに左端の行き止まり方向へスワイプするとGoogleアプリ（Discover）を固定動作として起動する。
  */
 @Composable
 fun DiscoverPage(
     discoverMode: DiscoverMode,
     feedBridge: FeedBridge,
+    isSettledOnDiscover: Boolean = true,
     onSelectDiscoverMode: (DiscoverMode) -> Unit,
     onOpenGoogleApp: () -> Unit,
     onTriggerAction: (LauncherAction) -> Unit,
@@ -85,6 +93,8 @@ fun DiscoverPage(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showModeDialog by remember { mutableStateOf(false) }
     var hasClearedInitialCache by remember { mutableStateOf(false) }
+    val currentSettled by rememberUpdatedState(isSettledOnDiscover)
+    val currentOnOpenGoogleApp by rememberUpdatedState(onOpenGoogleApp)
 
     fun loadCategory(category: FeedCategory, forceRefresh: Boolean = false) {
         if (forceRefresh) {
@@ -124,6 +134,39 @@ fun DiscoverPage(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                val thresholdPx = 64.dp.toPx()
+                val bottomChipExclusionPx = 76.dp.toPx()
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    // Discoverページに到達完了している状態で、かつ下部ジャンルチップバー以外の領域から始まったスワイプのみ対象
+                    if (!currentSettled || down.position.y > size.height - bottomChipExclusionPx) {
+                        return@awaitEachGesture
+                    }
+                    var totalDx = 0f
+                    var totalDy = 0f
+                    var triggered = false
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val dx = change.position.x - change.previousPosition.x
+                        val dy = change.position.y - change.previousPosition.y
+                        totalDx += dx
+                        totalDy += dy
+
+                        // 左端の行き止まり方向（左→右へ指を動かすスワイプ: totalDx > 0）へ一定以上スワイプしたらGoogleアプリを起動
+                        if (!triggered &&
+                            totalDx > thresholdPx &&
+                            abs(totalDx) > abs(totalDy) * 1.3f
+                        ) {
+                            triggered = true
+                            change.consume()
+                            currentOnOpenGoogleApp()
+                        }
+                    }
+                }
+            }
             .padding(horizontal = 10.dp)
     ) {
         // 1. コンパクトヘッダーバー（タイトル ＋ Google App起動ボタン ＋ はてブ起動ボタン ＋ 更新 ＋ 設定）

@@ -294,6 +294,15 @@ fun LauncherScreen(
         setOf(singlePagerState.currentPage.coerceIn(0, pages.lastIndex))
     }
 
+    // Discoverページに到達して静止しているか（左端行き止まりからの追加スワイプでGoogleアプリを起動するため）
+    val isSettledOnDiscover = if (isDualPageMode) {
+        !dualPagerState.isScrollInProgress &&
+            dualSlots.getOrNull(dualPagerState.settledPage)?.primaryPage?.id == LauncherPage.PAGE_ID_DISCOVER
+    } else {
+        !singlePagerState.isScrollInProgress &&
+            pages.getOrNull(singlePagerState.settledPage)?.id == LauncherPage.PAGE_ID_DISCOVER
+    }
+
     // Backボタン押下時：オーバーレイや編集モードを閉じ、HOME以外のページにいる場合はHOMEへ戻す (仕様 4)
     val shouldInterceptBack = uiState.overlay.isSearchOverlayOpen ||
         uiState.overlay.isSettingsOpen ||
@@ -340,6 +349,7 @@ fun LauncherScreen(
                         uiState = uiState,
                         adaptiveSpec = adaptiveSpec,
                         isHalfPaneInDualMode = false,
+                        isSettledOnDiscover = isSettledOnDiscover,
                         viewModel = viewModel
                     )
                 }
@@ -402,6 +412,7 @@ fun LauncherScreen(
                                         uiState = uiState,
                                         adaptiveSpec = adaptiveSpec,
                                         isHalfPaneInDualMode = false,
+                                        isSettledOnDiscover = isSettledOnDiscover,
                                         viewModel = viewModel
                                     )
                                 }
@@ -418,6 +429,7 @@ fun LauncherScreen(
                                                 uiState = uiState,
                                                 adaptiveSpec = adaptiveSpec,
                                                 isHalfPaneInDualMode = true,
+                                                isSettledOnDiscover = isSettledOnDiscover,
                                                 viewModel = viewModel
                                             )
                                         }
@@ -440,6 +452,7 @@ fun LauncherScreen(
                                                 uiState = uiState,
                                                 adaptiveSpec = adaptiveSpec,
                                                 isHalfPaneInDualMode = true,
+                                                isSettledOnDiscover = isSettledOnDiscover,
                                                 viewModel = viewModel
                                             )
                                         }
@@ -461,6 +474,7 @@ fun LauncherScreen(
                                 uiState = uiState,
                                 adaptiveSpec = adaptiveSpec,
                                 isHalfPaneInDualMode = false,
+                                isSettledOnDiscover = isSettledOnDiscover,
                                 viewModel = viewModel
                             )
                         }
@@ -690,6 +704,7 @@ private fun LauncherPageContent(
     uiState: LauncherUiState,
     adaptiveSpec: AdaptiveLayoutSpec,
     isHalfPaneInDualMode: Boolean,
+    isSettledOnDiscover: Boolean,
     viewModel: LauncherViewModel
 ) {
     val context = LocalContext.current
@@ -701,6 +716,7 @@ private fun LauncherPageContent(
             DiscoverPage(
                 discoverMode = uiState.settings.discoverMode,
                 feedBridge = viewModel.feedBridge,
+                isSettledOnDiscover = isSettledOnDiscover,
                 onSelectDiscoverMode = { viewModel.setDiscoverMode(it) },
                 onOpenGoogleApp = {
                     val opened = viewModel.feedBridge.openGoogleDiscoverApp()
