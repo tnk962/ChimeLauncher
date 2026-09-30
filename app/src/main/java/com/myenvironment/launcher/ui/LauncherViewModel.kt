@@ -27,6 +27,8 @@ import com.myenvironment.launcher.core.model.LauncherSettings
 import com.myenvironment.launcher.core.model.LayoutItem
 import com.myenvironment.launcher.core.model.ReturnChimeInterval
 import com.myenvironment.launcher.core.search.AppUsageMetric
+import com.myenvironment.launcher.core.update.AppUpdateState
+import com.myenvironment.launcher.core.update.ReleaseUpdateInfo
 import com.myenvironment.launcher.core.widget.WidgetProviderCatalogItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -41,6 +43,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.UUID
 
 /**
@@ -126,6 +129,7 @@ data class LauncherUiState(
     val dockItems: List<DockItem> = emptyList(),
     val settings: LauncherSettings = LauncherSettings(),
     val snapshots: List<BackupSnapshotSummary> = emptyList(),
+    val updateState: AppUpdateState = AppUpdateState.Idle,
     val overlay: OverlayControlState = OverlayControlState()
 )
 
@@ -143,6 +147,7 @@ class LauncherViewModel(
     val widgetHostManager = container.widgetHostManager
     val searchEngine = container.searchEngine
     val feedBridge = container.feedBridge
+    val appUpdateManager = container.appUpdateManager
 
     private val overlayState = MutableStateFlow(OverlayControlState())
     private val availableWidgetsState = MutableStateFlow<List<WidgetProviderCatalogItem>>(emptyList())
@@ -176,9 +181,10 @@ class LauncherViewModel(
         ) { snaps, overlay, widgets -> Triple(snaps, overlay, widgets) },
         combine(
             appUsageRepository.usageMetrics,
-            appUsageRepository.hasUsageAccessPermission
-        ) { usage, hasUsagePerm -> usage to hasUsagePerm }
-    ) { (apps, pkgs, uPages), (items, dock, settings), (snaps, overlay, widgets), (usage, hasUsagePerm) ->
+            appUsageRepository.hasUsageAccessPermission,
+            appUpdateManager.updateState
+        ) { usage, hasUsagePerm, updateSt -> Triple(usage, hasUsagePerm, updateSt) }
+    ) { (apps, pkgs, uPages), (items, dock, settings), (snaps, overlay, widgets), (usage, hasUsagePerm, updateSt) ->
         val fixedLeftAndHome = buildList {
             if (settings.discoverMode != DiscoverMode.DISABLED) {
                 add(LauncherPage.FIXED_DISCOVER)
@@ -203,6 +209,7 @@ class LauncherViewModel(
             dockItems = dock,
             settings = settings,
             snapshots = snaps,
+            updateState = updateSt,
             overlay = overlay
         )
     }.stateIn(
@@ -235,10 +242,11 @@ class LauncherViewModel(
 
     /**
      * Chime Launcher がフォアグラウンドに表示された際、Chime Moments (First / Return / Time) を判定し、
-     * 検索用の利用統計キャッシュもバックグラウンド更新する (仕様 6〜10, 29, 30, 37)
+     * 検索用の利用統計キャッシュおよびGitHub Releasesの新バージョン確認もバックグラウンド更新する (仕様 6〜10, 29, 30, 37)
      */
     fun onLauncherResumed(nowMillis: Long = System.currentTimeMillis()) {
         appUsageRepository.refreshUsageStatsAsync(force = false)
+        appUpdateManager.checkForUpdatesAutoIfNeeded(nowMillis)
         viewModelScope.launch {
             val currentSettings = settingsRepository.settings.first()
             val lastFirstDate = settingsRepository.lastFirstChimeDate.first()
@@ -1521,6 +1529,28 @@ class LauncherViewModel(
 
     fun clearStatusMessage() {
         overlayState.update { it.copy(statusMessage = null) }
+    }
+
+    // --- アプリ内自己アップデート (GitHub Releases 連携) ---
+
+    fun checkForAppUpdate() {
+        appUpdateManager.checkForUpdates(manual = true)
+    }
+
+    fun downloadAndInstallAppUpdate(release: ReleaseUpdateInfo) {
+        appUpdateManager.downloadAndInstallRelease(release)
+    }
+
+    fun installDownloadedApk(apkFilePath: String) {
+        appUpdateManager.triggerPackageInstaller(File(apkFilePath))
+    }
+
+    fun openGitHubReleasesPage(url: String = AppUpdateState.GITHUB_RELEASES_PAGE_URL) {
+        appUpdateManager.openUrlInBrowser(url)
+    }
+
+    fun openUnknownAppSourcesSettings() {
+        appUpdateManager.openUnknownSourcesSettings()
     }
 
     private fun findFirstAvailableCell(pageId: String, isExpandedMode: Boolean): GridPosition {

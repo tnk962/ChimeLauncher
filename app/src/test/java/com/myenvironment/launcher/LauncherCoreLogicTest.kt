@@ -860,4 +860,50 @@ class LauncherCoreLogicTest {
         assertEquals(2, result.matchingApps.size)
         assertEquals("com.example.note.freq", result.matchingApps.first().packageName)
     }
+
+    @Test
+    fun `AppUpdateParser compares semantic versions and selects release APK from GitHub Releases JSON`() {
+        val parser = com.myenvironment.launcher.core.update.AppUpdateParser
+
+        // 1. セマンティックバージョンの比較検証
+        assertTrue(parser.isNewerVersion("1.0.0", "v1.1.0"))
+        assertTrue(parser.isNewerVersion("1.1.0", "v1.1.1"))
+        assertTrue(parser.isNewerVersion("1.1.0", "v2.0.0"))
+        org.junit.Assert.assertFalse(parser.isNewerVersion("1.1.0", "v1.1.0"))
+        org.junit.Assert.assertFalse(parser.isNewerVersion("1.1.0", "v1.0.0"))
+
+        // 2. GitHub Releases API JSON パース検証（Debug版とRelease版がある場合にRelease APKが優先されること）
+        val sampleJson = """
+            {
+              "tag_name": "v1.2.0",
+              "name": "Chime Launcher v1.2.0",
+              "body": "・新バージョンの自動検知に対応\n・設定画面から1タップでアップデート可能",
+              "html_url": "https://github.com/tnk962/ChimeLauncher/releases/tag/v1.2.0",
+              "published_at": "2026-09-30T14:30:00Z",
+              "assets": [
+                {
+                  "name": "ChimeLauncher-v1.2.0-debug.apk",
+                  "size": 18500000,
+                  "browser_download_url": "https://github.com/tnk962/ChimeLauncher/releases/download/v1.2.0/ChimeLauncher-v1.2.0-debug.apk"
+                },
+                {
+                  "name": "ChimeLauncher-v1.2.0.apk",
+                  "size": 3600000,
+                  "browser_download_url": "https://github.com/tnk962/ChimeLauncher/releases/download/v1.2.0/ChimeLauncher-v1.2.0.apk"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val parsed = parser.parseLatestReleaseJson(sampleJson)
+        org.junit.Assert.assertNotNull(parsed)
+        assertEquals("v1.2.0", parsed!!.tagName)
+        assertEquals("1.2.0", parsed.versionName)
+        assertEquals("ChimeLauncher-v1.2.0.apk", parsed.apkFileName)
+        assertEquals(3600000L, parsed.apkSizeBytes)
+        assertEquals(
+            "https://github.com/tnk962/ChimeLauncher/releases/download/v1.2.0/ChimeLauncher-v1.2.0.apk",
+            parsed.apkDownloadUrl
+        )
+    }
 }

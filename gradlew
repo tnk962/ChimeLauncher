@@ -3,7 +3,9 @@
 if [ -z "$JAVA_HOME" ] && [ -d "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home" ]; then
     export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
 fi
-export ANDROID_USER_HOME="/Users/yohei/projects/TodoActions/AndroidLauncher/.android-home/.android"
+if [ -d "/Users/yohei/projects/TodoActions/AndroidLauncher/.android-home/.android" ]; then
+    export ANDROID_USER_HOME="/Users/yohei/projects/TodoActions/AndroidLauncher/.android-home/.android"
+fi
 
 #
 # Copyright © 2015 the original authors.

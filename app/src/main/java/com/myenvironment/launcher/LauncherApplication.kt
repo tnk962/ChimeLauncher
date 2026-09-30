@@ -19,6 +19,7 @@ import com.myenvironment.launcher.core.storage.LayoutRepository
 import com.myenvironment.launcher.core.storage.RoomLayoutRepository
 import com.myenvironment.launcher.core.storage.SettingsRepository
 import com.myenvironment.launcher.core.storage.db.LauncherDatabase
+import com.myenvironment.launcher.core.update.AppUpdateManager
 import com.myenvironment.launcher.core.widget.WidgetHostManager
 
 /**
@@ -73,6 +74,9 @@ class AppContainer(context: Context) {
 
     val feedBridge: FeedBridge =
         DefaultFeedBridge(appContext)
+
+    val appUpdateManager: AppUpdateManager =
+        AppUpdateManager(appContext)
 }
 
 class LauncherApplication : Application() {

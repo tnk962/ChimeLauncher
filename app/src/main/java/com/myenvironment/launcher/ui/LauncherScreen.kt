@@ -1076,6 +1076,7 @@ fun LauncherScreen(
                 statusMessage = uiState.overlay.statusMessage,
                 isEmbeddedPage = false,
                 hasUsageAccessPermission = uiState.hasUsageAccessPermission,
+                updateState = uiState.updateState,
                 onClearStatusMessage = { viewModel.clearStatusMessage() },
                 onToggleLayoutLock = { viewModel.setLayoutLocked(it) },
                 onUpdateCompactGrid = { c, r -> viewModel.updateCompactGrid(c, r) },
@@ -1105,6 +1106,11 @@ fun LauncherScreen(
                 onAddDemoMissingAppPlaceholder = {
                     viewModel.addDemoMissingAppPlaceholder(adaptiveSpec.isExpanded && !isDualPageMode)
                 },
+                onCheckForUpdate = { viewModel.checkForAppUpdate() },
+                onDownloadAndInstallUpdate = { viewModel.downloadAndInstallAppUpdate(it) },
+                onInstallDownloadedApk = { viewModel.installDownloadedApk(it) },
+                onOpenUnknownSourcesSettings = { viewModel.openUnknownAppSourcesSettings() },
+                onOpenGitHubReleases = { viewModel.openGitHubReleasesPage(it) },
                 onClose = { viewModel.closeSettings() }
             )
         }
@@ -1384,6 +1390,7 @@ private fun LauncherPageContent(
                 statusMessage = uiState.overlay.statusMessage,
                 isEmbeddedPage = true,
                 hasUsageAccessPermission = uiState.hasUsageAccessPermission,
+                updateState = uiState.updateState,
                 onClearStatusMessage = { viewModel.clearStatusMessage() },
                 onToggleLayoutLock = { viewModel.setLayoutLocked(it) },
                 onUpdateCompactGrid = { c, r -> viewModel.updateCompactGrid(c, r) },
@@ -1413,6 +1420,11 @@ private fun LauncherPageContent(
                 onAddDemoMissingAppPlaceholder = {
                     viewModel.addDemoMissingAppPlaceholder(useExpandedFullGrid)
                 },
+                onCheckForUpdate = { viewModel.checkForAppUpdate() },
+                onDownloadAndInstallUpdate = { viewModel.downloadAndInstallAppUpdate(it) },
+                onInstallDownloadedApk = { viewModel.installDownloadedApk(it) },
+                onOpenUnknownSourcesSettings = { viewModel.openUnknownAppSourcesSettings() },
+                onOpenGitHubReleases = { viewModel.openGitHubReleasesPage(it) },
                 onClose = { viewModel.jumpToPage(LauncherPage.PAGE_ID_HOME) }
             )
         }

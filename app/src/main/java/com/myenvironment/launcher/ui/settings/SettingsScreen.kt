@@ -27,8 +27,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -37,6 +40,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -65,6 +69,8 @@ import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
 import com.myenvironment.launcher.core.model.IndicatorStyle
 import com.myenvironment.launcher.core.model.LauncherSettings
 import com.myenvironment.launcher.core.model.ReturnChimeInterval
+import com.myenvironment.launcher.core.update.AppUpdateState
+import com.myenvironment.launcher.core.update.ReleaseUpdateInfo
 
 /**
  * Chime Launcher 設定および Backup & Restore 画面 (仕様 2, 6〜20, 33)
@@ -78,6 +84,7 @@ fun SettingsScreen(
     statusMessage: String?,
     isEmbeddedPage: Boolean = false,
     hasUsageAccessPermission: Boolean = false,
+    updateState: AppUpdateState = AppUpdateState.Idle,
     onClearStatusMessage: () -> Unit,
     onToggleLayoutLock: (Boolean) -> Unit,
     onUpdateCompactGrid: (Int, Int) -> Unit,
@@ -103,6 +110,11 @@ fun SettingsScreen(
     onShowJsonPreview: () -> Unit,
     onAutoBindMissingApps: () -> Unit = {},
     onAddDemoMissingAppPlaceholder: () -> Unit,
+    onCheckForUpdate: () -> Unit = {},
+    onDownloadAndInstallUpdate: (ReleaseUpdateInfo) -> Unit = {},
+    onInstallDownloadedApk: (String) -> Unit = {},
+    onOpenUnknownSourcesSettings: () -> Unit = {},
+    onOpenGitHubReleases: (String) -> Unit = {},
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
@@ -200,6 +212,37 @@ fun SettingsScreen(
                         fontSize = 13.sp,
                         modifier = Modifier.padding(12.dp)
                     )
+                }
+            }
+
+            // 新しいバージョンが検知されている場合、またはダウンロード中・インストール待ちの場合は最上部にハイライト表示
+            if (updateState is AppUpdateState.UpdateAvailable ||
+                updateState is AppUpdateState.Downloading ||
+                updateState is AppUpdateState.ReadyToInstall
+            ) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xEE18283C)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "🚀 Chime Launcher の新しいアップデートがあります",
+                            color = Color(0xFF7FD7FF),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        AppUpdateControlSection(
+                            updateState = updateState,
+                            onCheckForUpdate = onCheckForUpdate,
+                            onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
+                            onInstallDownloadedApk = onInstallDownloadedApk,
+                            onOpenUnknownSourcesSettings = onOpenUnknownSourcesSettings,
+                            onOpenGitHubReleases = onOpenGitHubReleases,
+                            showCheckButton = false
+                        )
+                    }
                 }
             }
 
@@ -861,9 +904,9 @@ fun SettingsScreen(
                 }
             }
 
-            // 8. バージョン・ビルド情報（最下部）
-            SettingsSectionCard(title = "バージョン・ビルド情報") {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // 8. バージョン・ビルド情報 & 自動アップデート（最下部）
+            SettingsSectionCard(title = "バージョン・ビルド情報 & アップデート") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -887,12 +930,28 @@ fun SettingsScreen(
                             fontSize = 13.sp
                         )
                     }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = Color(0x33FFFFFF)
+                    )
+
+                    AppUpdateControlSection(
+                        updateState = updateState,
+                        onCheckForUpdate = onCheckForUpdate,
+                        onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
+                        onInstallDownloadedApk = onInstallDownloadedApk,
+                        onOpenUnknownSourcesSettings = onOpenUnknownSourcesSettings,
+                        onOpenGitHubReleases = onOpenGitHubReleases,
+                        showCheckButton = true
+                    )
+
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 4.dp),
                         color = Color(0x33FFFFFF)
                     )
                     Text(
-                        text = "最新更新 (v1.0.0 - Chime Launcher): 正式名称「Chime Launcher」と新アプリアイコン(Adaptive Icon対応)を導入。ページインジケーターで節目を静かに知らせる「Chime Moments (First / Return / Time Chime)」、インジケーター表示切替 (Dots / Icons / Text)、およびアプリ検索のZero Query状態 (Recently Used / Frequently Used / Recently Installed) と利用頻度順ソートを実装",
+                        text = "最新更新 (v1.1.0 - Chime Launcher): GitHub Releases からの新バージョン自動検知と、設定画面から1タップで最新APKをダウンロード＆上書きインストールできるアプリ内アップデート機能を実装。GitHub Actions 自動ビルドおよび署名キー統一にも対応",
                         color = Color(0xFF9AA0A6),
                         fontSize = 11.sp,
                         lineHeight = 16.sp
@@ -901,6 +960,187 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun AppUpdateControlSection(
+    updateState: AppUpdateState,
+    onCheckForUpdate: () -> Unit,
+    onDownloadAndInstallUpdate: (ReleaseUpdateInfo) -> Unit,
+    onInstallDownloadedApk: (String) -> Unit,
+    onOpenUnknownSourcesSettings: () -> Unit,
+    onOpenGitHubReleases: (String) -> Unit,
+    showCheckButton: Boolean
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (updateState) {
+            is AppUpdateState.Idle -> {
+                Text(
+                    text = "GitHub Releases から最新バージョンを確認し、アプリ内で直接アップデートできます。",
+                    color = Color(0xFFBDC1C6),
+                    fontSize = 12.sp
+                )
+            }
+
+            is AppUpdateState.Checking -> {
+                Text(
+                    text = "GitHub Releases に最新バージョンを確認しています...",
+                    color = Color(0xFF9AD4EE),
+                    fontSize = 12.sp
+                )
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+
+            is AppUpdateState.UpToDate -> {
+                Text(
+                    text = "✅ 最新バージョンを使用中です (v${updateState.currentVersion} • 確認: ${updateState.checkedAtText})",
+                    color = Color(0xFF81C995),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp
+                )
+                val latestRelease = updateState.latestRelease
+                if (latestRelease?.apkDownloadUrl != null && showCheckButton) {
+                    OutlinedButton(
+                        onClick = { onDownloadAndInstallUpdate(latestRelease) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("最新リリース (${latestRelease.tagName}) のAPKを再インストール")
+                    }
+                }
+            }
+
+            is AppUpdateState.UpdateAvailable -> {
+                val release = updateState.latestRelease
+                val sizeMb = if (release.apkSizeBytes > 0L) {
+                    String.format("%.1f MB", release.apkSizeBytes / (1024.0 * 1024.0))
+                } else {
+                    "APK"
+                }
+                Text(
+                    text = "新しいバージョン ${release.tagName} が公開されています（現在: v${updateState.currentVersion}）",
+                    color = Color(0xFF7FD7FF),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                if (release.releaseNotes.isNotBlank()) {
+                    Surface(
+                        color = Color(0x55000000),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = release.releaseNotes.take(360),
+                            color = Color(0xFFDADCE0),
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+                Button(
+                    onClick = { onDownloadAndInstallUpdate(release) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.SystemUpdateAlt, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("${release.tagName} をダウンロードしてアップデート ($sizeMb)")
+                }
+            }
+
+            is AppUpdateState.Downloading -> {
+                val release = updateState.latestRelease
+                val progressText = if (updateState.progressPercent >= 0) {
+                    "${updateState.progressPercent}%"
+                } else {
+                    "${updateState.downloadedBytes / 1024} KB"
+                }
+                Text(
+                    text = "${release.tagName} のAPKをダウンロード中... ($progressText)",
+                    color = Color(0xFF9AD4EE),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp
+                )
+                if (updateState.progressPercent in 0..100) {
+                    LinearProgressIndicator(
+                        progress = { updateState.progressPercent / 100f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+
+            is AppUpdateState.ReadyToInstall -> {
+                val release = updateState.latestRelease
+                Text(
+                    text = "✅ ${release.tagName} のダウンロードが完了しました。",
+                    color = Color(0xFF81C995),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                if (updateState.requiresInstallPermission) {
+                    Text(
+                        text = "※ 初回のみ「不明なアプリのインストール」で Chime Launcher を許可してから、下の「インストールを実行」を押してください。",
+                        color = Color(0xFFFDD663),
+                        fontSize = 12.sp
+                    )
+                    OutlinedButton(
+                        onClick = onOpenUnknownSourcesSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("1. 不明なアプリのインストール許可を開く")
+                    }
+                }
+                Button(
+                    onClick = { onInstallDownloadedApk(updateState.apkFilePath) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.SystemUpdateAlt, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("パッケージインストーラーでアップデートを実行")
+                }
+            }
+
+            is AppUpdateState.Error -> {
+                Text(
+                    text = "⚠️ ${updateState.message}",
+                    color = Color(0xFFF28B82),
+                    fontSize = 12.sp
+                )
+            }
+        }
+
+        if (showCheckButton) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                FilledTonalButton(
+                    onClick = onCheckForUpdate,
+                    enabled = updateState !is AppUpdateState.Checking &&
+                        updateState !is AppUpdateState.Downloading,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("アップデートを確認", fontSize = 12.sp)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        onOpenGitHubReleases(AppUpdateState.GITHUB_RELEASES_PAGE_URL)
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.OpenInBrowser, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("GitHub Releases", fontSize = 12.sp)
+                }
+            }
         }
     }
 }

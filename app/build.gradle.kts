@@ -14,11 +14,20 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.0.0"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-09-30 22:15 JST\"")
+        versionCode = 11
+        versionName = "1.1.0"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-09-30 23:35 JST\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("keystore/chime-signing.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {

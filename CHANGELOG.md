@@ -4,6 +4,19 @@
 
 ---
 
+## [1.1.0] - 2026-09-30 (Build 11) — アプリ内自動アップデート & GitHub Actions CI 修正
+
+### Added & Fixed
+- **アプリ内新バージョン自動検知 & 1タップ自己アップデート (`AppUpdateManager` / `SettingsScreen`)**:
+  - GitHub Releases API (`/repos/tnk962/ChimeLauncher/releases/latest`) と連携し、ホーム復帰時にバックグラウンド（3時間ごとスロットリング・通知なし）および設定画面の「アップデートを確認」ボタンで最新リリースを検知。
+  - 新しいバージョンが公開されている場合、`Chime Launcher 設定` の最上部および最下部の「バージョン・ビルド情報 & アップデート」セクションに新バージョン名・リリースノート・ファイルサイズを表示。
+  - **「ダウンロードしてアップデート」** ボタン1つで最新APKを進捗表示付きでキャッシュ取得し、`FileProvider` 経由で Android 標準のパッケージインストーラーを直接起動して上書きアップデート可能に（初回のみ「不明なアプリのインストール」許可画面への誘導ボタンも完備）。
+- **GitHub Actions ワークフロー修正 & 署名キー統一**:
+  - `gradle.properties` に残っていたローカル macOS 固有パス（`org.gradle.java.home=/opt/homebrew/...` 等）を削除し、GitHub Actions (`ubuntu-latest`) 上でのビルドエラーを解消。
+  - ローカルビルドと GitHub Actions ビルドの双方で同一の署名証明書 (`app/keystore/chime-signing.keystore`) を使用するよう統一し、`v1.0.0` をインストール済みの端末でもアンインストール不要でそのまま上書きアップデートできるよう対応。
+
+---
+
 ## [1.0.0] - 2026-09-30 (Build 10) — Chime Launcher 正式リリース
 
 ### Added & Changed
