@@ -4,6 +4,14 @@
 
 ---
 
+## [0.4.0] - 2026-09-30 (Build 4)
+
+### Changed
+- **Foldable 展開時（左右2ページ見開き表示モード）の Discover ＆ 設定ページ全画面固定化**:
+  - 折りたたみ端末を開いた状態で「左右2ページ見開き表示 (`DUAL_PAGE`)」を選択している際、`All Apps` や `HOME`・追加ページは従来通り左右2ページ見開きで表示しつつ、**左端の `Discover` ページ** と **右端の `My Launcher 設定` ページ** は常に **1ページ全画面表示固定** になるよう変更（`ExpandedPagerSlot.SingleFull` / `DualSpread`）。
+
+---
+
 ## [0.3.0] - 2026-09-30 (Build 3)
 
 ### Added & Changed

@@ -256,4 +256,47 @@ class LauncherCoreLogicTest {
         assertEquals(6, pref.columns)
         assertEquals(8, pref.rows)
     }
+
+    @Test
+    fun `buildExpandedDualSlots keeps Discover and Settings as 1-page full screen and middle pages as dual spreads`() {
+        val page2 = LauncherPage(id = "page_2", name = "Page 2", sortOrder = 1, isFixed = false)
+        val pages = listOf(
+            LauncherPage.FIXED_DISCOVER,
+            LauncherPage.FIXED_ALL_APPS,
+            LauncherPage.FIXED_HOME,
+            page2,
+            LauncherPage.FIXED_SETTINGS
+        )
+
+        val slots = com.myenvironment.launcher.ui.buildExpandedDualSlots(pages)
+
+        // Slot 0: Discover (1ページ全画面固定)
+        // Slot 1: All Apps + HOME (左右2ページ見開き)
+        // Slot 2: HOME + Page 2 (左右2ページ見開き)
+        // Slot 3: 設定 (1ページ全画面固定)
+        assertEquals(4, slots.size)
+        assertTrue(slots[0] is com.myenvironment.launcher.ui.ExpandedPagerSlot.SingleFull)
+        assertEquals(LauncherPage.PAGE_ID_DISCOVER, slots[0].primaryPage.id)
+
+        assertTrue(slots[1] is com.myenvironment.launcher.ui.ExpandedPagerSlot.DualSpread)
+        assertEquals(
+            setOf(LauncherPage.PAGE_ID_ALL_APPS, LauncherPage.PAGE_ID_HOME),
+            slots[1].visiblePageIds
+        )
+
+        assertTrue(slots[2] is com.myenvironment.launcher.ui.ExpandedPagerSlot.DualSpread)
+        assertEquals(
+            setOf(LauncherPage.PAGE_ID_HOME, "page_2"),
+            slots[2].visiblePageIds
+        )
+
+        assertTrue(slots[3] is com.myenvironment.launcher.ui.ExpandedPagerSlot.SingleFull)
+        assertEquals(LauncherPage.PAGE_ID_SETTINGS, slots[3].primaryPage.id)
+
+        assertEquals(0, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_DISCOVER))
+        assertEquals(1, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_ALL_APPS))
+        assertEquals(1, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_HOME))
+        assertEquals(2, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, "page_2"))
+        assertEquals(3, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_SETTINGS))
+    }
 }

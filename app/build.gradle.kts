@@ -14,9 +14,9 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-09-30 11:58 JST\"")
+        versionCode = 4
+        versionName = "0.4.0"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-09-30 12:26 JST\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

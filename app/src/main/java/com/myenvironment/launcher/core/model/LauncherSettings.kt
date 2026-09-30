@@ -28,11 +28,11 @@ enum class DiscoverMode(val displayName: String, val description: String) {
 enum class ExpandedPageLayoutMode(val displayName: String, val description: String) {
     DUAL_PAGE(
         displayName = "左右2ページ見開き表示 (推奨)",
-        description = "閉じた時のページを右側に寄せ、左側に1つ前のページを表示します (例: 左=All Apps / 右=HOME)"
+        description = "HOMEやAll Appsを左右2ページ見開きで表示します（Discover・設定ページは1ページ全画面固定）"
     ),
     SINGLE_FULL(
         displayName = "1ページ全画面表示",
-        description = "開いた時も1つのページを画面全体に広く表示します"
+        description = "開いた時もすべてのページを1ページ全画面で広く表示します"
     )
 }
 

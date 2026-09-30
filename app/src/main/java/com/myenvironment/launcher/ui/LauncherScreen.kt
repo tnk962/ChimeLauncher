@@ -76,14 +76,91 @@ import com.myenvironment.launcher.ui.settings.SettingsScreen
 import kotlinx.coroutines.launch
 
 /**
+ * Fold展開時（左右2ページ見開きモード）のページャースロットモデル
+ *
+ * - Discover ページおよび 設定 ページは常に 1ページ全画面表示固定 (SingleFull)
+ * - All Apps / HOME / ユーザー追加ページは 左右2ページ見開き表示 (DualSpread)
+ */
+internal sealed interface ExpandedPagerSlot {
+    val primaryPage: LauncherPage
+    val visiblePageIds: Set<String>
+
+    data class SingleFull(
+        val page: LauncherPage
+    ) : ExpandedPagerSlot {
+        override val primaryPage: LauncherPage get() = page
+        override val visiblePageIds: Set<String> get() = setOf(page.id)
+    }
+
+    data class DualSpread(
+        val leftPage: LauncherPage,
+        val rightPage: LauncherPage
+    ) : ExpandedPagerSlot {
+        override val primaryPage: LauncherPage get() = rightPage
+        override val visiblePageIds: Set<String> get() = setOf(leftPage.id, rightPage.id)
+    }
+}
+
+internal fun buildExpandedDualSlots(pages: List<LauncherPage>): List<ExpandedPagerSlot> {
+    if (pages.isEmpty()) {
+        return listOf(ExpandedPagerSlot.SingleFull(LauncherPage.FIXED_HOME))
+    }
+
+    val slots = mutableListOf<ExpandedPagerSlot>()
+
+    // 1. Discover ページは常に 1ページ全画面表示固定
+    pages.filter { it.id == LauncherPage.PAGE_ID_DISCOVER }.forEach { discoverPage ->
+        slots.add(ExpandedPagerSlot.SingleFull(discoverPage))
+    }
+
+    // 2. All Apps / HOME / ユーザー追加ページは左右2ページ見開きペアにする
+    val middlePages = pages.filter {
+        it.id != LauncherPage.PAGE_ID_DISCOVER && it.id != LauncherPage.PAGE_ID_SETTINGS
+    }
+    if (middlePages.size == 1) {
+        slots.add(ExpandedPagerSlot.SingleFull(middlePages[0]))
+    } else if (middlePages.size >= 2) {
+        for (i in 0 until middlePages.size - 1) {
+            slots.add(
+                ExpandedPagerSlot.DualSpread(
+                    leftPage = middlePages[i],
+                    rightPage = middlePages[i + 1]
+                )
+            )
+        }
+    }
+
+    // 3. 設定ページは常に 1ページ全画面表示固定
+    pages.filter { it.id == LauncherPage.PAGE_ID_SETTINGS }.forEach { settingsPage ->
+        slots.add(ExpandedPagerSlot.SingleFull(settingsPage))
+    }
+
+    return slots
+}
+
+internal fun resolveExpandedDualSlotIndex(
+    slots: List<ExpandedPagerSlot>,
+    targetPageId: String
+): Int {
+    if (slots.isEmpty()) return 0
+    val primaryMatch = slots.indexOfFirst { it.primaryPage.id == targetPageId }
+    if (primaryMatch >= 0) return primaryMatch
+    val visibleMatch = slots.indexOfFirst { it.visiblePageIds.contains(targetPageId) }
+    if (visibleMatch >= 0) return visibleMatch
+    val homeMatch = slots.indexOfFirst { it.visiblePageIds.contains(LauncherPage.PAGE_ID_HOME) }
+    return if (homeMatch >= 0) homeMatch else 0
+}
+
+/**
  * My Launcher ルート画面
  *
  * - ページ構成: [Discover] [All Apps] [HOME] [Page 2...] [設定 (一番右)]
  * - Fold閉 (Compact): 1ページ表示 + 下部 Bottom Dock
  * - Fold開 (Expanded):
- *   - DUAL_PAGE (デフォルト): 閉じた時に見ていたページを「右側」に寄せ、「左側」に1つ前のページを並べて2ページ同時表示 + 右端 Right Dock
- *     (例: HOME表示中に開くと 左=All Apps / 右=HOME、All Apps表示中に開くと 左=Discover / 右=All Apps)
- *   - SINGLE_FULL: 開いた時も1ページ全画面表示 (All Appsを左半分だけに寄せるオプション付き) + 右端 Right Dock
+ *   - DUAL_PAGE (デフォルト):
+ *     - Discover と 設定 は 1ページ全画面表示固定
+ *     - All Apps / HOME / 追加ページ は 左右2ページ見開き同時表示 + 右端 Right Dock
+ *   - SINGLE_FULL: 開いた時も全ページを1ページ全画面表示 + 右端 Right Dock
  */
 @Composable
 fun LauncherScreen(
@@ -102,7 +179,7 @@ fun LauncherScreen(
         uiState.settings.expandedPageLayoutMode == ExpandedPageLayoutMode.DUAL_PAGE &&
         pages.size >= 2
 
-    // 現在フォーカスしているメインページのID（閉じた時の表示ページ ＝ 開いた時の右側ページ）
+    // 現在フォーカスしているメインページのID（閉じた時の表示ページ ＝ 開いた時のメインページ）
     var focusedPageId by rememberSaveable { mutableStateOf(LauncherPage.PAGE_ID_HOME) }
 
     val focusedPageIndex = remember(pages, focusedPageId, homePageIndex) {
@@ -115,24 +192,26 @@ fun LauncherScreen(
         pageCount = { pages.size }
     )
 
-    // 2ページ見開き表示用 PagerState (pairIndex = 右側ページのインデックス - 1)
-    val dualPageCount = (pages.size - 1).coerceAtLeast(1)
-    val initialPairIndex = (focusedPageIndex - 1).coerceIn(0, dualPageCount - 1)
+    // 2ページ見開き表示用スロット一覧（Discover・設定は1ページ全画面、中間ページは見開き2ページ）
+    val dualSlots = remember(pages) { buildExpandedDualSlots(pages) }
+    val initialDualSlotIndex = remember(dualSlots, focusedPageId) {
+        resolveExpandedDualSlotIndex(dualSlots, focusedPageId)
+    }
     val dualPagerState = rememberPagerState(
-        initialPage = initialPairIndex,
-        pageCount = { dualPageCount }
+        initialPage = initialDualSlotIndex.coerceIn(0, (dualSlots.size - 1).coerceAtLeast(0)),
+        pageCount = { dualSlots.size }
     )
 
-    // Compact (1ページ) <-> Expanded (2ページ見開き) 切替時に、見ていたページが右側に来るよう即座に同期
-    LaunchedEffect(isDualPageMode, pages.size) {
+    // Compact (1ページ) <-> Expanded (2ページ見開き) 切替時に、見ていたページへ即座に同期
+    LaunchedEffect(isDualPageMode, pages.size, dualSlots.size) {
         val currentFocusedIdx = pages.indexOfFirst { it.id == focusedPageId }
             .takeIf { it >= 0 } ?: homePageIndex
 
         if (isDualPageMode) {
-            // 閉じた時のページ (currentFocusedIdx) が右側に来るペア = currentFocusedIdx - 1
-            val targetPair = (currentFocusedIdx - 1).coerceIn(0, (pages.size - 2).coerceAtLeast(0))
-            if (dualPagerState.currentPage != targetPair) {
-                dualPagerState.scrollToPage(targetPair)
+            val targetSlot = resolveExpandedDualSlotIndex(dualSlots, focusedPageId)
+                .coerceIn(0, (dualSlots.size - 1).coerceAtLeast(0))
+            if (dualPagerState.currentPage != targetSlot) {
+                dualPagerState.scrollToPage(targetSlot)
             }
         } else {
             val targetSingle = currentFocusedIdx.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
@@ -151,25 +230,25 @@ fun LauncherScreen(
         }
     }
 
-    // ユーザーが2ページ見開きPagerをスワイプした際に、右側ペインのページを focusedPageId として記録
-    LaunchedEffect(dualPagerState.settledPage, isDualPageMode, pages) {
+    // ユーザーが2ページ見開きPagerをスワイプした際に、スロットのメインページを focusedPageId として記録
+    LaunchedEffect(dualPagerState.settledPage, isDualPageMode, dualSlots) {
         if (isDualPageMode) {
-            val rightIdx = (dualPagerState.settledPage + 1).coerceIn(0, pages.lastIndex)
-            pages.getOrNull(rightIdx)?.let { rightPage ->
-                focusedPageId = rightPage.id
+            dualSlots.getOrNull(dualPagerState.settledPage)?.let { slot ->
+                focusedPageId = slot.primaryPage.id
             }
         }
     }
 
     // Homeジェスチャーまたはページジャンプ要求時に指定ページへスクロール (仕様 4)
-    LaunchedEffect(viewModel, pages, isDualPageMode) {
+    LaunchedEffect(viewModel, pages, dualSlots, isDualPageMode) {
         viewModel.pageNavigationEvents.collect { targetPageId ->
             val targetIdx = pages.indexOfFirst { it.id == targetPageId }
             if (targetIdx >= 0) {
                 focusedPageId = targetPageId
                 if (isDualPageMode) {
-                    val targetPair = (targetIdx - 1).coerceIn(0, (pages.size - 2).coerceAtLeast(0))
-                    dualPagerState.animateScrollToPage(targetPair)
+                    val targetSlot = resolveExpandedDualSlotIndex(dualSlots, targetPageId)
+                        .coerceIn(0, (dualSlots.size - 1).coerceAtLeast(0))
+                    dualPagerState.animateScrollToPage(targetSlot)
                 } else if (targetIdx < singlePagerState.pageCount) {
                     singlePagerState.animateScrollToPage(targetIdx)
                 }
@@ -179,7 +258,12 @@ fun LauncherScreen(
 
     // DiscoverMode が GOOGLE_APP の場合、左端のDiscoverページへ到達したタイミングでGoogleアプリを起動する (仕様 29)
     val leftmostActivePageId = if (isDualPageMode) {
-        pages.getOrNull(dualPagerState.settledPage)?.id
+        val slot = dualSlots.getOrNull(dualPagerState.settledPage)
+        when (slot) {
+            is ExpandedPagerSlot.SingleFull -> slot.page.id
+            is ExpandedPagerSlot.DualSpread -> slot.leftPage.id
+            null -> null
+        }
     } else {
         pages.getOrNull(singlePagerState.settledPage)?.id
     }
@@ -195,17 +279,17 @@ fun LauncherScreen(
         lastLeftmostPageId = currentId
     }
 
-    // 現在編集や追加のターゲットとなるメインページ（見開き時は右側ページ）
-    val activeMainPageIndex = if (isDualPageMode) {
-        (dualPagerState.currentPage + 1).coerceIn(0, pages.lastIndex)
+    // 現在編集や追加のターゲットとなるメインページ
+    val currentPage = if (isDualPageMode) {
+        val currentSlot = dualSlots.getOrNull(dualPagerState.currentPage.coerceIn(0, dualSlots.lastIndex))
+        currentSlot?.primaryPage ?: LauncherPage.FIXED_HOME
     } else {
-        singlePagerState.currentPage.coerceIn(0, pages.lastIndex)
+        pages.getOrNull(singlePagerState.currentPage.coerceIn(0, pages.lastIndex)) ?: LauncherPage.FIXED_HOME
     }
-    val currentPage = pages.getOrNull(activeMainPageIndex) ?: LauncherPage.FIXED_HOME
     val visiblePageIndices: Set<Int> = if (isDualPageMode) {
-        val left = dualPagerState.currentPage.coerceIn(0, pages.lastIndex)
-        val right = (dualPagerState.currentPage + 1).coerceIn(0, pages.lastIndex)
-        setOf(left, right)
+        val currentSlot = dualSlots.getOrNull(dualPagerState.currentPage.coerceIn(0, dualSlots.lastIndex))
+        val visibleIds = currentSlot?.visiblePageIds.orEmpty()
+        pages.mapIndexedNotNull { idx, page -> if (page.id in visibleIds) idx else null }.toSet()
     } else {
         setOf(singlePagerState.currentPage.coerceIn(0, pages.lastIndex))
     }
@@ -301,51 +385,65 @@ fun LauncherScreen(
                     )
 
                     if (isDualPageMode) {
-                        // 左右2ページ見開き表示: 左=1つ前のページ (pairIndex), 右=閉じた時のページ (pairIndex + 1)
+                        // 左右2ページ見開きモード（Discover と 設定 は 1ページ全画面固定、他は左右2ページ見開き）
                         HorizontalPager(
                             state = dualPagerState,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                        ) { pairIndex ->
-                            val leftPage = pages.getOrNull(pairIndex) ?: LauncherPage.FIXED_ALL_APPS
-                            val rightPage = pages.getOrNull(pairIndex + 1) ?: LauncherPage.FIXED_HOME
+                        ) { slotIndex ->
+                            val slot = dualSlots.getOrNull(slotIndex)
+                                ?: ExpandedPagerSlot.SingleFull(LauncherPage.FIXED_HOME)
 
-                            Row(modifier = Modifier.fillMaxSize()) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                ) {
+                            when (slot) {
+                                is ExpandedPagerSlot.SingleFull -> {
                                     LauncherPageContent(
-                                        page = leftPage,
+                                        page = slot.page,
                                         uiState = uiState,
                                         adaptiveSpec = adaptiveSpec,
-                                        isHalfPaneInDualMode = true,
+                                        isHalfPaneInDualMode = false,
                                         viewModel = viewModel
                                     )
                                 }
 
-                                VerticalDivider(
-                                    color = Color.White.copy(alpha = 0.12f),
-                                    thickness = 1.dp,
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .padding(vertical = 12.dp)
-                                )
+                                is ExpandedPagerSlot.DualSpread -> {
+                                    Row(modifier = Modifier.fillMaxSize()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                        ) {
+                                            LauncherPageContent(
+                                                page = slot.leftPage,
+                                                uiState = uiState,
+                                                adaptiveSpec = adaptiveSpec,
+                                                isHalfPaneInDualMode = true,
+                                                viewModel = viewModel
+                                            )
+                                        }
 
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                ) {
-                                    LauncherPageContent(
-                                        page = rightPage,
-                                        uiState = uiState,
-                                        adaptiveSpec = adaptiveSpec,
-                                        isHalfPaneInDualMode = true,
-                                        viewModel = viewModel
-                                    )
+                                        VerticalDivider(
+                                            color = Color.White.copy(alpha = 0.12f),
+                                            thickness = 1.dp,
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .padding(vertical = 12.dp)
+                                        )
+
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                        ) {
+                                            LauncherPageContent(
+                                                page = slot.rightPage,
+                                                uiState = uiState,
+                                                adaptiveSpec = adaptiveSpec,
+                                                isHalfPaneInDualMode = true,
+                                                viewModel = viewModel
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -373,10 +471,12 @@ fun LauncherScreen(
                         visiblePageIndices = visiblePageIndices,
                         isLayoutLocked = uiState.settings.layoutLocked,
                         onSelectPage = { idx ->
+                            val targetPage = pages.getOrNull(idx) ?: return@PageIndicatorBar
                             if (isDualPageMode) {
-                                val targetPair = if (idx == 0) 0 else (idx - 1).coerceIn(0, dualPageCount - 1)
+                                val targetSlot = resolveExpandedDualSlotIndex(dualSlots, targetPage.id)
+                                    .coerceIn(0, (dualSlots.size - 1).coerceAtLeast(0))
                                 coroutineScope.launch {
-                                    dualPagerState.animateScrollToPage(targetPair)
+                                    dualPagerState.animateScrollToPage(targetSlot)
                                 }
                             } else {
                                 coroutineScope.launch {
