@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.core.storage.db
 
+import com.myenvironment.launcher.core.model.LayoutSnapshot
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -87,6 +88,14 @@ interface LauncherDao {
     suspend fun deleteBackupSnapshotById(snapshotId: Long)
 
     // --- Transactions ---
+    @Transaction
+    suspend fun getLayoutSnapshot(): LayoutSnapshot =
+        LayoutSnapshot(
+            userPages = getUserPagesSnapshot().map { it.toDomain() },
+            items = getLayoutItemsSnapshot().map { it.toDomain() },
+            dockItems = getDockItemsSnapshot().map { it.toDomain() }
+        )
+
     @Transaction
     suspend fun deletePageAndItsItems(pageId: String) {
         deleteLayoutItemsByPageId(pageId)

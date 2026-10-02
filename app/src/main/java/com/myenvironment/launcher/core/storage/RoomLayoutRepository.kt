@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.core.storage
 
+import com.myenvironment.launcher.core.model.LayoutSnapshot
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
 import com.myenvironment.launcher.core.model.DockItem
 import com.myenvironment.launcher.core.model.GridPosition
@@ -35,6 +36,16 @@ class RoomLayoutRepository(
 
     override val dockItems: Flow<List<DockItem>> = dao.observeDockItems().map { entities ->
         entities.map { it.toDomain() }
+    }
+
+    override suspend fun getLayoutSnapshot() = dao.getLayoutSnapshot()
+
+    override suspend fun restoreLayoutSnapshot(snapshot: LayoutSnapshot) {
+        dao.replaceEntireLayout(
+            snapshot.userPages.map { UserPageEntity.fromDomain(it) },
+            snapshot.items.map { LayoutItemEntity.fromDomain(it) },
+            snapshot.dockItems.map { DockItemEntity.fromDomain(it) }
+        )
     }
 
     override suspend fun ensureInitialized() {
