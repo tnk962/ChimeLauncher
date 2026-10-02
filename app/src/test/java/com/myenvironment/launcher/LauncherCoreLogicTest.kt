@@ -286,7 +286,7 @@ class LauncherCoreLogicTest {
     }
 
     @Test
-    fun `buildExpandedDualSlots keeps Discover and Settings as 1-page full screen and middle pages as dual spreads`() {
+    fun `buildExpandedDualSlots keeps Discover All Apps and Settings full screen with home dual spreads`() {
         val page2 = LauncherPage(id = "page_2", name = "Page 2", sortOrder = 1, isFixed = false)
         val pages = listOf(
             LauncherPage.FIXED_DISCOVER,
@@ -299,18 +299,15 @@ class LauncherCoreLogicTest {
         val slots = com.myenvironment.launcher.ui.buildExpandedDualSlots(pages)
 
         // Slot 0: Discover (1ページ全画面固定)
-        // Slot 1: All Apps + HOME (左右2ページ見開き)
+        // Slot 1: All Apps (1ページ全画面固定)
         // Slot 2: HOME + Page 2 (左右2ページ見開き)
         // Slot 3: 設定 (1ページ全画面固定)
         assertEquals(4, slots.size)
         assertTrue(slots[0] is com.myenvironment.launcher.ui.ExpandedPagerSlot.SingleFull)
         assertEquals(LauncherPage.PAGE_ID_DISCOVER, slots[0].primaryPage.id)
 
-        assertTrue(slots[1] is com.myenvironment.launcher.ui.ExpandedPagerSlot.DualSpread)
-        assertEquals(
-            setOf(LauncherPage.PAGE_ID_ALL_APPS, LauncherPage.PAGE_ID_HOME),
-            slots[1].visiblePageIds
-        )
+        assertTrue(slots[1] is com.myenvironment.launcher.ui.ExpandedPagerSlot.SingleFull)
+        assertEquals(setOf(LauncherPage.PAGE_ID_ALL_APPS), slots[1].visiblePageIds)
 
         assertTrue(slots[2] is com.myenvironment.launcher.ui.ExpandedPagerSlot.DualSpread)
         assertEquals(
@@ -323,9 +320,55 @@ class LauncherCoreLogicTest {
 
         assertEquals(0, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_DISCOVER))
         assertEquals(1, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_ALL_APPS))
-        assertEquals(1, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_HOME))
+        assertEquals(2, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_HOME))
         assertEquals(2, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, "page_2"))
         assertEquals(3, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_SETTINGS))
+    }
+
+    @Test
+    fun `All Apps and sole HOME remain separate full pages without Discover`() {
+        val pages = listOf(LauncherPage.FIXED_ALL_APPS, LauncherPage.FIXED_HOME, LauncherPage.FIXED_SETTINGS)
+        val slots = com.myenvironment.launcher.ui.buildExpandedDualSlots(pages)
+        assertEquals(3, slots.size)
+        assertTrue(slots.all { it is com.myenvironment.launcher.ui.ExpandedPagerSlot.SingleFull })
+        assertEquals(pages.map { it.id }, slots.map { it.primaryPage.id })
+        assertEquals(0, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_ALL_APPS))
+        assertEquals(1, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_HOME))
+    }
+
+    @Test
+    fun `multiple home pages keep sliding spreads while All Apps is never paired`() {
+        val page2 = LauncherPage("page_2", "Page 2", 1)
+        val page3 = LauncherPage("page_3", "Page 3", 2)
+        val pages = listOf(LauncherPage.FIXED_ALL_APPS, LauncherPage.FIXED_HOME, page2, page3, LauncherPage.FIXED_SETTINGS)
+        val slots = com.myenvironment.launcher.ui.buildExpandedDualSlots(pages)
+        val spreads = slots.filterIsInstance<com.myenvironment.launcher.ui.ExpandedPagerSlot.DualSpread>()
+        assertEquals(2, spreads.size)
+        assertEquals(listOf("home" to "page_2", "page_2" to "page_3"), spreads.map { it.leftPage.id to it.rightPage.id })
+        assertTrue(spreads.none { LauncherPage.PAGE_ID_ALL_APPS in it.visiblePageIds })
+        assertEquals(0, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_ALL_APPS))
+        assertEquals(1, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, "home"))
+        assertEquals(1, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, "page_2"))
+        assertEquals(2, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, "page_3"))
+    }
+
+    @Test
+    fun `empty page list has a usable full HOME fallback`() {
+        val slots = com.myenvironment.launcher.ui.buildExpandedDualSlots(emptyList())
+        assertEquals(listOf(com.myenvironment.launcher.ui.ExpandedPagerSlot.SingleFull(LauncherPage.FIXED_HOME)), slots)
+        assertEquals(0, com.myenvironment.launcher.ui.resolveExpandedDualSlotIndex(slots, LauncherPage.PAGE_ID_ALL_APPS))
+    }
+
+    @Test
+    fun `adding from full All Apps uses destination HOME grid instead of source grid`() {
+        val dual = com.myenvironment.launcher.core.model.ExpandedPageLayoutMode.DUAL_PAGE
+        val single = com.myenvironment.launcher.core.model.ExpandedPageLayoutMode.SINGLE_FULL
+        assertEquals(false, com.myenvironment.launcher.ui.shouldUseExpandedHomeGrid(false, dual, false))
+        assertEquals(false, com.myenvironment.launcher.ui.shouldUseExpandedHomeGrid(false, single, true))
+        assertEquals(false, com.myenvironment.launcher.ui.shouldUseExpandedHomeGrid(true, dual, true))
+        assertEquals(true, com.myenvironment.launcher.ui.shouldUseExpandedHomeGrid(true, dual, false))
+        assertEquals(true, com.myenvironment.launcher.ui.shouldUseExpandedHomeGrid(true, single, true))
+        assertEquals(true, com.myenvironment.launcher.ui.shouldUseExpandedHomeGrid(true, single, false))
     }
 
     @Test

@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -53,7 +52,7 @@ import com.myenvironment.launcher.ui.components.LauncherItemGraphic
  *
  * - 各セル内にPopup(DropdownMenu)を持たせない軽量構造と事前キャッシュImageBitmapにより、
  *   Fold展開時の大量アイコン表示でも滑らかに高速スクロール可能。
- * - Fold展開時に1ページ表示モードの場合、「左側半分のみ表示」か「全画面幅で表示」かもワンタップで切り替え可能。
+ * - Fold展開時も、Dockを除くページ領域全体を使用する。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -62,8 +61,6 @@ fun AllAppsTinyPage(
     columns: Int,
     iconSizeDp: Int,
     showLabels: Boolean,
-    isExpandedSinglePage: Boolean = false,
-    restrictToHalfWidthInExpanded: Boolean = false,
     appDiscoveryRepository: AppDiscoveryRepository,
     onLaunchApp: (AppInfo) -> Unit,
     onAddAppToHome: (AppInfo) -> Unit,
@@ -73,17 +70,12 @@ fun AllAppsTinyPage(
     onToggleLabels: () -> Unit,
     onChangeColumns: (Int) -> Unit,
     onChangeIconSize: (Int) -> Unit,
-    onToggleHalfWidthInExpanded: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showQuickConfigMenu by remember { mutableStateOf(false) }
     var selectedAppForDialog by remember { mutableStateOf<AppInfo?>(null) }
 
-    val effectiveColumns = if (isExpandedSinglePage && restrictToHalfWidthInExpanded) {
-        (columns / 2).coerceAtLeast(5)
-    } else {
-        columns.coerceAtLeast(4)
-    }
+    val effectiveColumns = columns.coerceAtLeast(4)
 
     Box(
         modifier = modifier
@@ -94,9 +86,7 @@ fun AllAppsTinyPage(
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(
-                    if (isExpandedSinglePage && restrictToHalfWidthInExpanded) 0.52f else 1f
-                )
+                .fillMaxWidth()
         ) {
             // コンパクトなヘッダー
             Row(
@@ -128,15 +118,6 @@ fun AllAppsTinyPage(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isExpandedSinglePage && onToggleHalfWidthInExpanded != null) {
-                        IconButton(onClick = onToggleHalfWidthInExpanded) {
-                            Icon(
-                                imageVector = Icons.Default.AspectRatio,
-                                contentDescription = "左側のみ / 全画面 切替",
-                                tint = Color.White
-                            )
-                        }
-                    }
 
                     IconButton(onClick = onOpenSearch) {
                         Icon(
@@ -168,20 +149,6 @@ fun AllAppsTinyPage(
                                     showQuickConfigMenu = false
                                 }
                             )
-                            if (isExpandedSinglePage && onToggleHalfWidthInExpanded != null) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (restrictToHalfWidthInExpanded) "↔ 全画面幅で表示する"
-                                            else "⇤ 左側半分だけに表示する"
-                                        )
-                                    },
-                                    onClick = {
-                                        onToggleHalfWidthInExpanded()
-                                        showQuickConfigMenu = false
-                                    }
-                                )
-                            }
                             DropdownMenuItem(
                                 text = { Text("列数を増やす (${columns}列 → ${(columns + 1).coerceAtMost(14)}列)") },
                                 onClick = { onChangeColumns(columns + 1) }

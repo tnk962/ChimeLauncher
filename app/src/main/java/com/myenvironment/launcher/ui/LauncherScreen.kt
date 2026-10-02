@@ -125,8 +125,8 @@ internal fun LauncherPage.isEditableHomePage(): Boolean {
 /**
  * Fold展開時（左右2ページ見開きモード）のページャースロットモデル
  *
- * - Discover ページおよび 設定 ページは常に 1ページ全画面表示固定 (SingleFull)
- * - All Apps / HOME / ユーザー追加ページは 左右2ページ見開き表示 (DualSpread)
+ * - Discover / All Apps / 設定は常に1ページ全画面表示固定 (SingleFull)
+ * - HOME / ユーザー追加ページは左右2ページ見開き表示 (DualSpread)。HOMEのみならSingleFull
  */
 internal sealed interface ExpandedPagerSlot {
     val primaryPage: LauncherPage
@@ -160,9 +160,15 @@ internal fun buildExpandedDualSlots(pages: List<LauncherPage>): List<ExpandedPag
         slots.add(ExpandedPagerSlot.SingleFull(discoverPage))
     }
 
-    // 2. All Apps / HOME / ユーザー追加ページは左右2ページ見開きペアにする
+    // 2. All Appsは見開きに含めず、ページ領域全体に表示する。
+    pages.filter { it.id == LauncherPage.PAGE_ID_ALL_APPS }.forEach { appsPage ->
+        slots.add(ExpandedPagerSlot.SingleFull(appsPage))
+    }
+
+    // 3. HOME / ユーザー追加ページは左右2ページ見開きペアにする
     val middlePages = pages.filter {
-        it.id != LauncherPage.PAGE_ID_DISCOVER && it.id != LauncherPage.PAGE_ID_SETTINGS
+        it.id != LauncherPage.PAGE_ID_DISCOVER && it.id != LauncherPage.PAGE_ID_ALL_APPS &&
+            it.id != LauncherPage.PAGE_ID_SETTINGS
     }
     if (middlePages.size == 1) {
         slots.add(ExpandedPagerSlot.SingleFull(middlePages[0]))
@@ -177,7 +183,7 @@ internal fun buildExpandedDualSlots(pages: List<LauncherPage>): List<ExpandedPag
         }
     }
 
-    // 3. 設定ページは常に 1ページ全画面表示固定
+    // 4. 設定ページは常に 1ページ全画面表示固定
     pages.filter { it.id == LauncherPage.PAGE_ID_SETTINGS }.forEach { settingsPage ->
         slots.add(ExpandedPagerSlot.SingleFull(settingsPage))
     }
@@ -198,6 +204,13 @@ internal fun resolveExpandedDualSlotIndex(
     return if (homeMatch >= 0) homeMatch else 0
 }
 
+/** All Appsの表示幅ではなく、登録先HOMEの実際のグリッドを選ぶ。 */
+internal fun shouldUseExpandedHomeGrid(
+    isExpanded: Boolean,
+    mode: ExpandedPageLayoutMode,
+    hasAdditionalHomePages: Boolean
+): Boolean = isExpanded && (mode == ExpandedPageLayoutMode.SINGLE_FULL || !hasAdditionalHomePages)
+
 /**
  * Chime Launcher ルート画面
  *
@@ -205,9 +218,9 @@ internal fun resolveExpandedDualSlotIndex(
  * - Fold閉 (Compact): 1ページ表示 + 下部 Bottom Dock
  * - Fold開 (Expanded):
  *   - DUAL_PAGE (デフォルト):
- *     - Discover と 設定 は 1ページ全画面表示固定
- *     - All Apps / HOME / 追加ページ は 左右2ページ見開き同時表示 + 右端 Right Dock
- *   - SINGLE_FULL: 開いた時も全ページを1ページ全画面表示 + 右端 Right Dock
+ *     - Discover・All Apps・設定は1ページ全画面表示固定
+ *     - HOME / 追加ページは左右2ページ見開き同時表示。Dockは設定位置に配置
+ *   - SINGLE_FULL: 開いた時も全ページを1ページ全画面表示。Dockは設定位置に配置
  */
 @Composable
 fun LauncherScreen(
@@ -293,7 +306,7 @@ fun LauncherScreen(
         pageCount = { pages.size }
     )
 
-    // 2ページ見開き表示用スロット一覧（Discover・設定は1ページ全画面、中間ページは見開き2ページ）
+    // 2ページ見開き表示用スロット一覧（Discover・All Apps・設定は全面、HOME・追加ページは見開き）
     val dualSlots = remember(pages) { buildExpandedDualSlots(pages) }
     val initialDualSlotIndex = remember(dualSlots, focusedPageId) {
         resolveExpandedDualSlotIndex(dualSlots, focusedPageId)
@@ -535,7 +548,8 @@ fun LauncherScreen(
     LaunchedEffect(dualPagerState.settledPage, isDualPageMode, dualSlots) {
         if (isDualPageMode) {
             dualSlots.getOrNull(dualPagerState.settledPage)?.let { slot ->
-                focusedPageId = slot.primaryPage.id
+                // 表示中のペインに指定ページが残っていれば、Foldを閉じる際の復帰先を維持する。
+                if (focusedPageId !in slot.visiblePageIds) focusedPageId = slot.primaryPage.id
             }
         }
     }
@@ -676,7 +690,7 @@ fun LauncherScreen(
                 )
 
                 if (isDualPageMode) {
-                    // 左右2ページ見開きモード（Discover と 設定 は 1ページ全画面固定、他は左右2ページ見開き）
+                    // 左右2ページ見開きモード（Discover・All Apps・設定は1ページ全画面固定、他は左右2ページ見開き）
                     HorizontalPager(
                         state = dualPagerState,
                         beyondViewportPageCount = dualSlots.size.coerceAtLeast(1),
@@ -1041,7 +1055,6 @@ fun LauncherScreen(
                 onSetDockIconCount = { viewModel.setDockIconCount(it) },
                 onSetExpandedDockPosition = { viewModel.setExpandedDockPosition(it) },
                 onSelectExpandedLayoutMode = { viewModel.setExpandedPageLayoutMode(it) },
-                onToggleAllAppsLeftOnlyInExpanded = { viewModel.setAllAppsLeftOnlyInExpandedSingle(it) },
                 onSelectIndicatorStyle = { viewModel.setIndicatorStyle(it) },
                 onToggleFirstChime = { viewModel.setFirstChimeEnabled(it) },
                 onToggleReturnChime = { viewModel.setReturnChimeEnabled(it) },
@@ -1285,12 +1298,14 @@ private fun LauncherPageContent(
                 columns = tinyCols,
                 iconSizeDp = uiState.settings.tinyIconsSizeDp,
                 showLabels = uiState.settings.tinyIconsShowLabels,
-                isExpandedSinglePage = useExpandedFullGrid,
-                restrictToHalfWidthInExpanded = uiState.settings.allAppsLeftOnlyInExpandedSingle,
                 appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
                 onLaunchApp = { viewModel.launchApp(it) },
                 onAddAppToHome = { app ->
-                    viewModel.quickAddAppToHome(app, useExpandedFullGrid, context)
+                    viewModel.quickAddAppToHome(
+                        app,
+                        shouldUseExpandedHomeGrid(adaptiveSpec.isExpanded, uiState.settings.expandedPageLayoutMode, uiState.userPages.isNotEmpty()),
+                        context
+                    )
                 },
                 onAddAppToDock = { app ->
                     viewModel.quickAddAppToDock(app, context)
@@ -1329,11 +1344,6 @@ private fun LauncherPageContent(
                         sizeDp = newSize,
                         showLabels = uiState.settings.tinyIconsShowLabels
                     )
-                },
-                onToggleHalfWidthInExpanded = {
-                    viewModel.setAllAppsLeftOnlyInExpandedSingle(
-                        !uiState.settings.allAppsLeftOnlyInExpandedSingle
-                    )
                 }
             )
         }
@@ -1357,7 +1367,6 @@ private fun LauncherPageContent(
                 onSetDockIconCount = { viewModel.setDockIconCount(it) },
                 onSetExpandedDockPosition = { viewModel.setExpandedDockPosition(it) },
                 onSelectExpandedLayoutMode = { viewModel.setExpandedPageLayoutMode(it) },
-                onToggleAllAppsLeftOnlyInExpanded = { viewModel.setAllAppsLeftOnlyInExpandedSingle(it) },
                 onSelectIndicatorStyle = { viewModel.setIndicatorStyle(it) },
                 onToggleFirstChime = { viewModel.setFirstChimeEnabled(it) },
                 onToggleReturnChime = { viewModel.setReturnChimeEnabled(it) },

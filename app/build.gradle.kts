@@ -14,9 +14,9 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.2.1"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-02 Dock settings release\"")
+        versionCode = 16
+        versionName = "1.3.0"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-02 Undo, Fold All Apps and Discover release\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
