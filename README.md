@@ -1,6 +1,6 @@
-# Chime Launcher (v1.2.0)
+# Chime Launcher (v1.2.1)
 
-Google Discoverの連続スワイプに対応しました。[正式版v1.2.0](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.2.0)から本体とGoogleDiscoverCompanionの2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。SC-56F / Android 16のカバー画面でDiscoverの開閉・再表示・ホーム復帰を確認済みです。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
+Dockのアイコン数とFold展開時の位置を設定できるようになりました。Google Discoverの連続スワイプにも対応しています。[正式版v1.2.1](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.2.1)から本体とGoogleDiscoverCompanionの2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。SC-56F / Android 16のカバー画面でDiscoverの開閉・再表示・ホーム復帰を確認済みです。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
 
 > **Chimeは通知しない。気づかせる。**  
 > *Chime Moments are ambient, not interruptive.*
@@ -15,10 +15,10 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ### 1. 初回 APK をダウンロードする
 1. このリポジトリの **[Releases（最新リリース）](../../releases/latest)** ページを開きます。
-2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.2.0.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`GoogleDiscoverCompanion-v1.2.0.apk`** も導入してください。
+2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.2.1.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`GoogleDiscoverCompanion-v1.2.1.apk`** も導入してください。
 
 ### 2. Android 端末にインストールする
-1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリから **`ChimeLauncher-v1.2.0.apk`** を開きます。
+1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリから **`ChimeLauncher-v1.2.1.apk`** を開きます。
 2. 初回のみ「この提供元の不明なアプリをインストールしますか？」と表示された場合は、**「設定」→「この提供元のアプリを許可」** を ON にして「インストール」をタップします。
 3. **Google Play プロテクトの確認が表示された場合**:
    - 個人開発の配布用 APK のため、「Play プロテクトによりブロックされました」や「スキャンしますか？」と表示されることがあります。
@@ -61,10 +61,10 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 ### 4. Adaptive Fold UI（Dock位置の選択 & 左右2ページ見開き）
 
 - `WindowWidthSizeClass` に基づき、折りたたみ閉状態（Compact）では **下部 Dock + 1ページ表示**、展開状態（Expanded）では **左右2ページ見開き表示 (`DUAL_PAGE`)**（Discover と 設定ページは1ページ全画面固定）または **1ページ全画面表示 (`SINGLE_FULL`)** に自動適応します。
-- **未リリースのDock設定**: 設定画面の **「Dockのアイコン数」** の `−` / `＋` で表示・追加できる上限を **1〜12個** に変更できます（初期値は7個）。入りきらないアイコンはDock内で横・縦にスクロールできます。
+- **Dock設定（v1.2.1以降）**: 設定画面の **「Dockのアイコン数」** の `−` / `＋` で表示・追加できる上限を **1〜12個** に変更できます（初期値は7個）。入りきらないアイコンはDock内で横・縦にスクロールできます。
 - **「Fold展開時のDock位置」** で **下・左・右** を選択できます（初期値は右）。下を選んでも見開き表示を維持し、Foldを閉じると下部Dockに戻ります。
 - 個数を減らした場合、上限を超えた登録済みアイコンは削除されず非表示になり、個数を増やすと再表示されます。アイコンの追加・並べ替え・削除は編集モードまたは長押しメニューから行います。
-- Dock設定は保存され、JSONバックアップ・復元にも含まれます。旧バックアップでDock設定がない場合は、7個・展開時は右の初期値を使用します。公開済みv1.2.0にはこの設定変更は含まれていません。
+- Dock設定は保存され、JSONバックアップ・復元にも含まれます。旧バックアップでDock設定がない場合は、7個・展開時は右の初期値を使用します。この設定はv1.2.1から利用できます。
 
 ### 5. 高密度 AppWidget 対応 & ページ跨ぎドラッグ移動
 - 任意の Android ウィジェットを配置・リサイズ（`spanX × spanY`）でき、余白を極限まで削った高情報密度スケーリングで表示します。
