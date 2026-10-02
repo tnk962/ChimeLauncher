@@ -4,6 +4,19 @@
 
 ---
 
+## [Unreleased] - 2026-10-02
+
+### Added & Changed
+
+- **Dockの設定を可変化**（[Issue #1](https://github.com/tnk962/ChimeLauncher/issues/1)、[PR #2](https://github.com/tnk962/ChimeLauncher/pull/2)）:
+  - 設定画面からDockアイコン数を1〜12個で変更可能に（初期値は7個）。アプリ・ショートカット・アクションの追加とAll Appsからの追加に同じ上限を適用。
+  - Fold展開時のDock位置を下・左・右から選択可能に（初期値は右）。下配置でも左右2ページ見開き表示を維持し、Compactでは下部Dockを使用。
+  - 入りきらないアイコンの横・縦スクロールに対応。個数を減らしても登録済みアイコンを保持し、個数を増やすと再表示。
+  - Dock設定の永続化とJSONバックアップ・復元に対応。設定のない旧データは初期値で読み込み。
+- **検証**: ユニットテスト30件成功、Debug APKビルド成功。ユーザーによる実機動作確認済み。
+
+---
+
 ## [1.2.0] - 2026-10-01 (Build 14)
 
 - Google Discover連携をmainへ統合し、本体とCompanionの2 APKを正式公開。
