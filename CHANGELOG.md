@@ -6,7 +6,13 @@
 
 ## [Unreleased]
 
+---
+
+## [1.3.0] - 2026-10-02 (Build 16)
+
 ### Added & Changed
+
+- 本体をv1.3.0 / Build 16、Companionをv1.3.0 / Build 5へ更新。Google Discoverの接続修正には両APKの更新が必要。
 
 - **Fold展開時のAll Apps全面表示**（[Issue #5](https://github.com/tnk962/ChimeLauncher/issues/5)）:
   - 見開きモードでもAll Appsを独立した1ページで表示し、Dockを除く領域全体を使用。HOME・追加ページの見開き表示を維持。
