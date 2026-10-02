@@ -26,6 +26,30 @@ import org.junit.Test
 class LauncherCoreLogicTest {
 
     @Test
+    fun `dock settings preserve legacy defaults and round trip through backup JSON`() {
+        val legacy = Json.decodeFromString<LauncherSettings>("{}")
+        assertEquals(7, legacy.effectiveDockIconCount)
+        assertEquals(com.myenvironment.launcher.ui.adaptive.DockPlacement.RIGHT,
+            com.myenvironment.launcher.ui.adaptive.resolveDockPlacement(legacy, true))
+        val configured = LauncherSettings(dockIconCount = 12,
+            expandedDockPosition = com.myenvironment.launcher.core.model.ExpandedDockPosition.LEFT)
+        assertEquals(configured, Json.decodeFromString<LauncherSettings>(Json.encodeToString(configured)))
+    }
+
+    @Test
+    fun `expanded dock respects every position while compact stays bottom`() {
+        com.myenvironment.launcher.core.model.ExpandedDockPosition.entries.forEach { position ->
+            val settings = LauncherSettings(expandedDockPosition = position)
+            assertEquals(com.myenvironment.launcher.ui.adaptive.DockPlacement.valueOf(position.name),
+                com.myenvironment.launcher.ui.adaptive.resolveDockPlacement(settings, true))
+            assertEquals(com.myenvironment.launcher.ui.adaptive.DockPlacement.BOTTOM,
+                com.myenvironment.launcher.ui.adaptive.resolveDockPlacement(settings, false))
+        }
+        assertEquals(1, LauncherSettings(dockIconCount = -1).effectiveDockIconCount)
+        assertEquals(12, LauncherSettings(dockIconCount = 100).effectiveDockIconCount)
+    }
+
+    @Test
     fun `resolvePosition converts compact position to expanded when expanded is null`() {
         val item = LayoutItem(
             id = "item_1",

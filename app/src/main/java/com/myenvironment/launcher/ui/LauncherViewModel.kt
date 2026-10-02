@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.ui
 
+import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Context
@@ -722,6 +723,10 @@ class LauncherViewModel(
                 }
                 is ItemPickerTarget.Dock -> {
                     val currentDock = uiState.value.dockItems
+                    if (currentDock.size >= uiState.value.settings.effectiveDockIconCount) {
+                        overlayState.update { it.copy(statusMessage = "Dockが満杯です。設定でアイコン数を増やしてください") }
+                        return@launch
+                    }
                     val newDock = DockItem(
                         id = UUID.randomUUID().toString(),
                         positionIndex = currentDock.size,
@@ -756,6 +761,10 @@ class LauncherViewModel(
                 }
                 is ItemPickerTarget.Dock -> {
                     val currentDock = uiState.value.dockItems
+                    if (currentDock.size >= uiState.value.settings.effectiveDockIconCount) {
+                        overlayState.update { it.copy(statusMessage = "Dockが満杯です。設定でアイコン数を増やしてください") }
+                        return@launch
+                    }
                     val newDock = DockItem(
                         id = UUID.randomUUID().toString(),
                         positionIndex = currentDock.size,
@@ -790,6 +799,10 @@ class LauncherViewModel(
                 }
                 is ItemPickerTarget.Dock -> {
                     val currentDock = uiState.value.dockItems
+                    if (currentDock.size >= uiState.value.settings.effectiveDockIconCount) {
+                        overlayState.update { it.copy(statusMessage = "Dockが満杯です。設定でアイコン数を増やしてください") }
+                        return@launch
+                    }
                     val newDock = DockItem(
                         id = UUID.randomUUID().toString(),
                         positionIndex = currentDock.size,
@@ -1095,6 +1108,10 @@ class LauncherViewModel(
     fun quickAddAppToDock(app: AppInfo, context: Context) = runIfUnlocked {
         viewModelScope.launch {
             val currentDock = uiState.value.dockItems
+            if (currentDock.size >= uiState.value.settings.effectiveDockIconCount) {
+                Toast.makeText(context, "Dockが満杯です。設定でアイコン数を増やしてください", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
             val newDock = DockItem(
                 id = UUID.randomUUID().toString(),
                 positionIndex = currentDock.size,
@@ -1336,6 +1353,14 @@ class LauncherViewModel(
         viewModelScope.launch {
             settingsRepository.setDiscoverMode(mode)
         }
+    }
+
+    fun setDockIconCount(count: Int) {
+        viewModelScope.launch { settingsRepository.setDockIconCount(count) }
+    }
+
+    fun setExpandedDockPosition(position: ExpandedDockPosition) {
+        viewModelScope.launch { settingsRepository.setExpandedDockPosition(position) }
     }
 
     fun setExpandedPageLayoutMode(mode: com.myenvironment.launcher.core.model.ExpandedPageLayoutMode) {

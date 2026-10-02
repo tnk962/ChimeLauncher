@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.core.storage
 
+import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
 import com.myenvironment.launcher.core.model.IndicatorStyle
@@ -15,6 +16,10 @@ interface SettingsRepository {
 
     val lastFirstChimeDate: Flow<String>
     val lastLauncherVisibleTimestamp: Flow<Long>
+
+    suspend fun setDockIconCount(count: Int)
+
+    suspend fun setExpandedDockPosition(position: ExpandedDockPosition)
 
     suspend fun setLayoutLocked(locked: Boolean)
 

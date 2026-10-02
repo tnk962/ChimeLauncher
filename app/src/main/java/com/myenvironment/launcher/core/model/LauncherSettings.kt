@@ -98,11 +98,18 @@ enum class ReturnChimeInterval(
     )
 }
 
+@Serializable
+enum class ExpandedDockPosition(val displayName: String) {
+    BOTTOM("下"), LEFT("左"), RIGHT("右")
+}
+
 /**
  * Chime Launcher 全体の設定モデル (仕様 10.2, 15, 21, 22, 29, Chime Moments 11〜16, 28, 32)
  */
 @Serializable
 data class LauncherSettings(
+    val dockIconCount: Int = 7,
+    val expandedDockPosition: ExpandedDockPosition = ExpandedDockPosition.RIGHT,
     val layoutLocked: Boolean = false,
     val compactGridColumns: Int = 5,
     val compactGridRows: Int = 6,
@@ -122,4 +129,6 @@ data class LauncherSettings(
     val returnChimeInterval: ReturnChimeInterval = ReturnChimeInterval.HOURS_1,
     val timeChimeEnabled: Boolean = true,
     val chimeSoundEnabled: Boolean = false
-)
+) {
+    val effectiveDockIconCount: Int get() = dockIconCount.coerceIn(1, 12)
+}

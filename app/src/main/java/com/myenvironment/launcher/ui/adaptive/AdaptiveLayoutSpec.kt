@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.ui.adaptive
 
+import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.window.core.layout.WindowWidthSizeClass
@@ -11,8 +12,9 @@ import com.myenvironment.launcher.core.model.LauncherSettings
 enum class DockPlacement {
     /** Compact (Fold Closed / 通常スマホ) -> 下部Dock */
     BOTTOM,
-    /** Expanded (Fold Open / タブレット幅) -> 右側Dock */
-    RIGHT
+    /** Expanded の左右側面Dock */
+    RIGHT,
+    LEFT
 }
 
 /**
@@ -37,9 +39,16 @@ fun rememberAdaptiveLayoutSpec(settings: LauncherSettings): AdaptiveLayoutSpec {
 
     return AdaptiveLayoutSpec(
         isExpanded = isExpanded,
-        dockPlacement = if (isExpanded) DockPlacement.RIGHT else DockPlacement.BOTTOM,
+        dockPlacement = resolveDockPlacement(settings, isExpanded),
         homeGridColumns = if (isExpanded) settings.expandedGridColumns else settings.compactGridColumns,
         homeGridRows = if (isExpanded) settings.expandedGridRows else settings.compactGridRows,
         tinyIconsColumns = if (isExpanded) settings.tinyIconsColumnsExpanded else settings.tinyIconsColumnsCompact
     )
 }
+
+fun resolveDockPlacement(settings: LauncherSettings, isExpanded: Boolean): DockPlacement =
+    if (!isExpanded) DockPlacement.BOTTOM else when (settings.expandedDockPosition) {
+        ExpandedDockPosition.BOTTOM -> DockPlacement.BOTTOM
+        ExpandedDockPosition.LEFT -> DockPlacement.LEFT
+        ExpandedDockPosition.RIGHT -> DockPlacement.RIGHT
+    }
