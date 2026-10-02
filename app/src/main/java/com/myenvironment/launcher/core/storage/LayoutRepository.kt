@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.core.storage
 
+import com.myenvironment.launcher.core.model.LayoutSnapshot
 import com.myenvironment.launcher.core.model.DockItem
 import com.myenvironment.launcher.core.model.GridPosition
 import com.myenvironment.launcher.core.model.LauncherPage
@@ -18,6 +19,12 @@ interface LayoutRepository {
 
     /** Dockアイテム一覧（positionIndex順） */
     val dockItems: Flow<List<DockItem>>
+
+    /** Undo用に3テーブルを一貫した状態で読み込む。 */
+    suspend fun getLayoutSnapshot(): LayoutSnapshot
+
+    /** Undo用スナップショットを設定に触れずトランザクションで復元する。 */
+    suspend fun restoreLayoutSnapshot(snapshot: LayoutSnapshot)
 
     /** 初回起動時にデフォルトのHOMEアイテム＆Dockを初期投入する */
     suspend fun ensureInitialized()

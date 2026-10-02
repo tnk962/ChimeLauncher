@@ -14,6 +14,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -664,7 +667,12 @@ fun LauncherScreen(
                     onAddApp = { viewModel.requestAddItemToPage(currentPage, initialTab = 0) },
                     onAddWidget = { viewModel.requestAddItemToPage(currentPage, initialTab = 1) },
                     onManagePages = { viewModel.openPageManager() },
-                    onFinishEdit = { viewModel.exitEditMode() }
+                    onFinishEdit = { viewModel.exitEditMode() },
+                    undoCount = uiState.overlay.undoCount,
+                    canUndo = !uiState.settings.layoutLocked && uiState.overlay.undoCount > 0 &&
+                        !uiState.overlay.isLayoutOperationInProgress && !uiState.overlay.isWidgetPlacementPending &&
+                        activeDragState == null,
+                    onUndo = { viewModel.undoLastLayoutEdit() }
                 )
 
                 if (isDualPageMode) {
@@ -1438,6 +1446,7 @@ private fun LauncherPageContent(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EditModeBanner(
     visible: Boolean,
@@ -1445,7 +1454,10 @@ private fun EditModeBanner(
     onAddApp: () -> Unit,
     onAddWidget: () -> Unit,
     onManagePages: () -> Unit,
-    onFinishEdit: () -> Unit
+    onFinishEdit: () -> Unit,
+    undoCount: Int,
+    canUndo: Boolean,
+    onUndo: () -> Unit
 ) {
     AnimatedVisibility(visible = visible) {
         Surface(
@@ -1455,9 +1467,8 @@ private fun EditModeBanner(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text(
@@ -1467,7 +1478,15 @@ private fun EditModeBanner(
                     fontSize = 13.sp
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilledTonalButton(onClick = onUndo, enabled = canUndo) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("元に戻す ($undoCount)", fontSize = 12.sp)
+                    }
                     FilledTonalButton(onClick = onAddApp) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))

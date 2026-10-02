@@ -31,6 +31,11 @@ import com.myenvironment.launcher.core.search.AppUsageMetric
 import com.myenvironment.launcher.core.update.AppUpdateState
 import com.myenvironment.launcher.core.update.ReleaseUpdateInfo
 import com.myenvironment.launcher.core.widget.WidgetProviderCatalogItem
+import com.myenvironment.launcher.core.model.LayoutSnapshot
+import com.myenvironment.launcher.core.storage.LayoutUndoManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,6 +100,9 @@ internal data class PendingWidgetPlacement(
  */
 data class OverlayControlState(
     val isEditMode: Boolean = false,
+    val undoCount: Int = 0,
+    val isLayoutOperationInProgress: Boolean = false,
+    val isWidgetPlacementPending: Boolean = false,
     val isSearchOverlayOpen: Boolean = false,
     val isSettingsOpen: Boolean = false,
     val isHomeEditSheetOpen: Boolean = false,
@@ -153,7 +161,22 @@ class LauncherViewModel(
     private val overlayState = MutableStateFlow(OverlayControlState())
     private val availableWidgetsState = MutableStateFlow<List<WidgetProviderCatalogItem>>(emptyList())
 
+    private val committingWidgetIds = mutableSetOf<Int>()
     private var pendingWidgetPlacement: PendingWidgetPlacement? = null
+        set(value) {
+            field = value
+            overlayState.update { it.copy(isWidgetPlacementPending = value != null || committingWidgetIds.isNotEmpty()) }
+        }
+    private val undoManager = LayoutUndoManager(
+        readSnapshot = { layoutRepository.getLayoutSnapshot() },
+        restoreSnapshot = { snapshot ->
+            layoutRepository.restoreLayoutSnapshot(snapshot)
+        },
+        releaseWidgetId = widgetHostManager::deleteAppWidgetId,
+        protectedWidgetIds = {
+            committingWidgetIds + listOfNotNull(pendingWidgetPlacement?.appWidgetId)
+        }
+    )
     private val silentRebindAttemptedItemIds = HashSet<String>()
 
     // Pagerを指定ページIDへ移動させるイベントストリーム (Home Gesture復帰等で利用: 仕様 4)
@@ -221,7 +244,13 @@ class LauncherViewModel(
 
     init {
         viewModelScope.launch {
+            undoManager.state.collect { state ->
+                overlayState.update { it.copy(undoCount = state.count, isLayoutOperationInProgress = state.isBusy) }
+            }
+        }
+        viewModelScope.launch {
             layoutRepository.ensureInitialized()
+            undoManager.initialize(runCatching { widgetHostManager.appWidgetHost.appWidgetIds.toSet() }.getOrDefault(emptySet()))
         }
         viewModelScope.launch {
             combine(
@@ -295,6 +324,7 @@ class LauncherViewModel(
      * ※通常のホーム遷移では毎回ハプティックや音を追加せず、Chime条件成立時のみ静かに反応する
      */
     fun onHomeGestureInvoked() {
+        exitEditMode()
         overlayState.update {
             it.copy(
                 isEditMode = false,
@@ -316,6 +346,77 @@ class LauncherViewModel(
 
     fun jumpToPage(pageId: String) {
         _pageNavigationEvents.tryEmit(pageId)
+    }
+
+    private fun layoutState(snapshot: LayoutSnapshot) = uiState.value.copy(
+        userPages = snapshot.userPages,
+        layoutItems = snapshot.items,
+        dockItems = snapshot.dockItems
+    )
+
+    private suspend fun reportLayoutFailure(action: suspend () -> Unit) {
+        try {
+            action()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            val message = "レイアウト操作に失敗しました: ${failure.message}"
+            overlayState.update { it.copy(statusMessage = message) }
+            Toast.makeText(container.appContext, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun launchLayoutEdit(action: suspend (LayoutSnapshot) -> Unit) {
+        viewModelScope.launch {
+            reportLayoutFailure {
+                undoManager.edit { snapshot ->
+                    if (settingsRepository.settings.first().layoutLocked) {
+                        overlayState.update { it.copy(showLockedAlert = true) }
+                    } else {
+                        action(snapshot)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun launchWithoutUndo(action: suspend (LayoutSnapshot) -> Unit) {
+        viewModelScope.launch {
+            reportLayoutFailure { undoManager.withoutHistory(action) }
+        }
+    }
+
+    fun undoLastLayoutEdit() = runIfUnlocked {
+        if (!overlayState.value.isEditMode || overlayState.value.isWidgetPlacementPending) return@runIfUnlocked
+        viewModelScope.launch {
+            reportLayoutFailure {
+                val restored = undoManager.undo {
+                    overlayState.value.isEditMode && !overlayState.value.isWidgetPlacementPending &&
+                        !settingsRepository.settings.first().layoutLocked
+                } ?: return@reportLayoutFailure
+                val restoredPage = restored.userPages.firstOrNull { page ->
+                    uiState.value.userPages.none { it.id == page.id }
+                }
+                restoredPage?.let { _pageNavigationEvents.tryEmit(it.id) }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        val pending = pendingWidgetPlacement
+        pendingWidgetPlacement = null
+        // viewModelScopeは既にキャンセルされるため、有限の後処理を別スコープで完了させる。
+        CoroutineScope(Dispatchers.Main.immediate).launch {
+            reportLayoutFailure {
+                undoManager.endSession()
+                pending?.let {
+                    if (it.appWidgetId !in layoutRepository.getLayoutSnapshot().widgetIds) {
+                        widgetHostManager.deleteAppWidgetId(it.appWidgetId)
+                    }
+                }
+            }
+        }
+        super.onCleared()
     }
 
     // --- レイアウトロック判定ヘルパー (仕様 15) ---
@@ -498,9 +599,9 @@ class LauncherViewModel(
      * 未インストールPlaceholderアイコンを、端末内（Pixel等）にインストール済みの該当・代替アプリにその位置のまま置き換える。
      */
     fun replaceMissingItemWithInstalledApp(missingItem: LayoutItem, targetApp: AppInfo) {
-        viewModelScope.launch {
+        launchWithoutUndo { snapshot ->
             if (missingItem.pageId == "dock") {
-                val existingDock = uiState.value.dockItems.find { it.id == missingItem.id }
+                val existingDock = snapshot.dockItems.find { it.id == missingItem.id }
                 if (existingDock != null) {
                     layoutRepository.upsertDockItem(
                         existingDock.copy(
@@ -511,7 +612,7 @@ class LauncherViewModel(
                     )
                 }
             } else {
-                val existingLayout = uiState.value.layoutItems.find { it.id == missingItem.id } ?: missingItem
+                val existingLayout = snapshot.items.find { it.id == missingItem.id } ?: missingItem
                 layoutRepository.upsertLayoutItem(
                     existingLayout.copy(
                         packageName = targetApp.packageName,
@@ -541,8 +642,8 @@ class LauncherViewModel(
      * 端末内に存在する場合は一括で自動紐付けする。
      */
     fun autoBindMissingAppsToInstalledApps() {
-        viewModelScope.launch {
-            val state = uiState.value
+        launchWithoutUndo { snapshot ->
+            val state = layoutState(snapshot)
             val installedPkgs = state.installedPackages
             val installedApps = state.installedApps
 
@@ -637,21 +738,18 @@ class LauncherViewModel(
     }
 
     fun enterEditMode() = runIfUnlocked {
+        if (overlayState.value.isEditMode) return@runIfUnlocked
         overlayState.update { it.copy(isEditMode = true) }
+        viewModelScope.launch { reportLayoutFailure { undoManager.beginSession() } }
     }
 
     fun toggleEditMode() {
-        if (overlayState.value.isEditMode) {
-            overlayState.update { it.copy(isEditMode = false) }
-        } else {
-            runIfUnlocked {
-                overlayState.update { it.copy(isEditMode = true) }
-            }
-        }
+        if (overlayState.value.isEditMode) exitEditMode() else enterEditMode()
     }
 
     fun exitEditMode() {
-        overlayState.update { it.copy(isEditMode = false) }
+        overlayState.update { it.copy(isEditMode = false, undoCount = 0) }
+        viewModelScope.launch { reportLayoutFailure { undoManager.endSession() } }
     }
 
     fun openSettings() {
@@ -705,10 +803,11 @@ class LauncherViewModel(
             pageId = LauncherPage.PAGE_ID_HOME,
             pageName = "HOME"
         )
-        viewModelScope.launch {
+        launchLayoutEdit { snapshot ->
             when (target) {
                 is ItemPickerTarget.HomePageCell -> {
-                    val pos = target.preferredCell ?: findFirstAvailableCell(target.pageId, isExpandedMode)
+                    if (target.pageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == target.pageId }) return@launchLayoutEdit
+                    val pos = target.preferredCell ?: findFirstAvailableCell(target.pageId, isExpandedMode, snapshot)
                     val newItem = LayoutItem(
                         id = UUID.randomUUID().toString(),
                         pageId = target.pageId,
@@ -722,10 +821,10 @@ class LauncherViewModel(
                     layoutRepository.upsertLayoutItem(newItem)
                 }
                 is ItemPickerTarget.Dock -> {
-                    val currentDock = uiState.value.dockItems
+                    val currentDock = snapshot.dockItems
                     if (currentDock.size >= uiState.value.settings.effectiveDockIconCount) {
                         overlayState.update { it.copy(statusMessage = "Dockが満杯です。設定でアイコン数を増やしてください") }
-                        return@launch
+                        return@launchLayoutEdit
                     }
                     val newDock = DockItem(
                         id = UUID.randomUUID().toString(),
@@ -743,10 +842,11 @@ class LauncherViewModel(
 
     fun addActionFromPicker(action: LauncherAction, isExpandedMode: Boolean) = runIfUnlocked {
         val target = overlayState.value.itemPickerTarget ?: return@runIfUnlocked
-        viewModelScope.launch {
+        launchLayoutEdit { snapshot ->
             when (target) {
                 is ItemPickerTarget.HomePageCell -> {
-                    val pos = target.preferredCell ?: findFirstAvailableCell(target.pageId, isExpandedMode)
+                    if (target.pageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == target.pageId }) return@launchLayoutEdit
+                    val pos = target.preferredCell ?: findFirstAvailableCell(target.pageId, isExpandedMode, snapshot)
                     val newItem = LayoutItem(
                         id = UUID.randomUUID().toString(),
                         pageId = target.pageId,
@@ -760,10 +860,10 @@ class LauncherViewModel(
                     layoutRepository.upsertLayoutItem(newItem)
                 }
                 is ItemPickerTarget.Dock -> {
-                    val currentDock = uiState.value.dockItems
+                    val currentDock = snapshot.dockItems
                     if (currentDock.size >= uiState.value.settings.effectiveDockIconCount) {
                         overlayState.update { it.copy(statusMessage = "Dockが満杯です。設定でアイコン数を増やしてください") }
-                        return@launch
+                        return@launchLayoutEdit
                     }
                     val newDock = DockItem(
                         id = UUID.randomUUID().toString(),
@@ -781,10 +881,11 @@ class LauncherViewModel(
 
     fun addShortcutFromPicker(label: String, uri: String, isExpandedMode: Boolean) = runIfUnlocked {
         val target = overlayState.value.itemPickerTarget ?: return@runIfUnlocked
-        viewModelScope.launch {
+        launchLayoutEdit { snapshot ->
             when (target) {
                 is ItemPickerTarget.HomePageCell -> {
-                    val pos = target.preferredCell ?: findFirstAvailableCell(target.pageId, isExpandedMode)
+                    if (target.pageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == target.pageId }) return@launchLayoutEdit
+                    val pos = target.preferredCell ?: findFirstAvailableCell(target.pageId, isExpandedMode, snapshot)
                     val newItem = LayoutItem(
                         id = UUID.randomUUID().toString(),
                         pageId = target.pageId,
@@ -798,10 +899,10 @@ class LauncherViewModel(
                     layoutRepository.upsertLayoutItem(newItem)
                 }
                 is ItemPickerTarget.Dock -> {
-                    val currentDock = uiState.value.dockItems
+                    val currentDock = snapshot.dockItems
                     if (currentDock.size >= uiState.value.settings.effectiveDockIconCount) {
                         overlayState.update { it.copy(statusMessage = "Dockが満杯です。設定でアイコン数を増やしてください") }
-                        return@launch
+                        return@launchLayoutEdit
                     }
                     val newDock = DockItem(
                         id = UUID.randomUUID().toString(),
@@ -830,7 +931,7 @@ class LauncherViewModel(
 
         // 先に前回の未完了バインドがあれば解放
         pendingWidgetPlacement?.let { stale ->
-            if (stale.existingItemId == null && stale.appWidgetId > 0) {
+            if (stale.appWidgetId > 0 && stale.appWidgetId !in committingWidgetIds) {
                 widgetHostManager.deleteAppWidgetId(stale.appWidgetId)
             }
         }
@@ -882,6 +983,10 @@ class LauncherViewModel(
             return
         }
 
+        pendingWidgetPlacement?.takeIf { it.appWidgetId !in committingWidgetIds }?.let {
+            widgetHostManager.deleteAppWidgetId(it.appWidgetId)
+        }
+        pendingWidgetPlacement = null
         val newWidgetId = widgetHostManager.allocateAppWidgetId()
         if (newWidgetId <= 0) return
 
@@ -920,18 +1025,27 @@ class LauncherViewModel(
             val providerInfo = withContext(Dispatchers.IO) {
                 widgetHostManager.findProviderInfo(item.packageName, item.activityName)
             } ?: return@launch
-
             val candidateId = widgetHostManager.allocateAppWidgetId()
             if (candidateId <= 0) return@launch
-
-            val bound = widgetHostManager.tryBindAppWidget(candidateId, providerInfo.provider)
-            if (bound) {
-                if (item.appWidgetId > 0 && item.appWidgetId != candidateId) {
-                    widgetHostManager.deleteAppWidgetId(item.appWidgetId)
+            committingWidgetIds.add(candidateId)
+            var committed = false
+            try {
+                if (widgetHostManager.tryBindAppWidget(candidateId, providerInfo.provider)) {
+                    reportLayoutFailure {
+                        committed = undoManager.withoutHistory { snapshot ->
+                            if (snapshot.items.none { it.id == item.id }) return@withoutHistory false
+                            layoutRepository.updateWidgetId(item.id, candidateId)
+                            true
+                        }
+                    }
                 }
-                layoutRepository.updateWidgetId(item.id, candidateId)
-            } else {
-                widgetHostManager.deleteAppWidgetId(candidateId)
+            } finally {
+                committingWidgetIds.remove(candidateId)
+                if (!committed) {
+                    withContext(NonCancellable) {
+                        if (candidateId !in layoutRepository.getLayoutSnapshot().widgetIds) widgetHostManager.deleteAppWidgetId(candidateId)
+                    }
+                }
             }
         }
     }
@@ -955,6 +1069,7 @@ class LauncherViewModel(
      */
     fun onWidgetBindActivityResult(granted: Boolean) {
         val pending = pendingWidgetPlacement ?: return
+        if (pending.appWidgetId in committingWidgetIds) return
         if (granted) {
             proceedAfterWidgetBound(pending)
         } else {
@@ -983,6 +1098,7 @@ class LauncherViewModel(
      */
     fun onWidgetConfigureActivityResult(success: Boolean) {
         val pending = pendingWidgetPlacement ?: return
+        if (pending.appWidgetId in committingWidgetIds) return
         if (success) {
             commitPendingWidget(pending)
         } else {
@@ -992,51 +1108,65 @@ class LauncherViewModel(
     }
 
     private fun commitPendingWidget(pending: PendingWidgetPlacement) {
-        pendingWidgetPlacement = null
+        if (!committingWidgetIds.add(pending.appWidgetId)) return
+        overlayState.update { it.copy(isWidgetPlacementPending = true) }
         viewModelScope.launch {
-            if (pending.existingItemId != null) {
-                layoutRepository.updateWidgetId(pending.existingItemId, pending.appWidgetId)
-                return@launch
+            var committed = false
+            try {
+                reportLayoutFailure {
+                    if (pending.existingItemId != null) {
+                        committed = undoManager.withoutHistory { snapshot ->
+                            if (snapshot.items.none { it.id == pending.existingItemId }) return@withoutHistory false
+                            layoutRepository.updateWidgetId(pending.existingItemId, pending.appWidgetId)
+                            true
+                        }
+                    } else {
+                        committed = undoManager.edit { snapshot ->
+                            val settings = settingsRepository.settings.first()
+                            if (settings.layoutLocked) return@edit false
+                            if (pending.pageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == pending.pageId }) return@edit false
+                            val cols = (if (pending.isExpandedMode) settings.expandedGridColumns else settings.compactGridColumns).coerceAtLeast(3)
+                            val rows = (if (pending.isExpandedMode) settings.expandedGridRows else settings.compactGridRows).coerceAtLeast(3)
+                            val (position, span) = findBestGridPlacementForSpan(
+                                existingItems = snapshot.items.filter { it.pageId == pending.pageId },
+                                requestedSpanX = pending.spanX,
+                                requestedSpanY = pending.spanY,
+                                preferredCell = pending.preferredCell,
+                                isExpandedMode = pending.isExpandedMode,
+                                columns = cols,
+                                rows = rows
+                            )
+                            layoutRepository.upsertLayoutItem(LayoutItem(
+                                id = UUID.randomUUID().toString(),
+                                pageId = pending.pageId,
+                                type = ItemType.WIDGET,
+                                packageName = pending.provider.packageName,
+                                activityName = pending.provider.className,
+                                label = pending.label,
+                                compact = position,
+                                expanded = if (pending.isExpandedMode) position else null,
+                                spanX = span.first,
+                                spanY = span.second,
+                                appWidgetId = pending.appWidgetId
+                            ))
+                            true
+                        }
+                        if (committed) _pageNavigationEvents.tryEmit(pending.pageId)
+                    }
+                }
+            } finally {
+                committingWidgetIds.remove(pending.appWidgetId)
+                if (pendingWidgetPlacement == pending) pendingWidgetPlacement = null
+                else overlayState.update { it.copy(isWidgetPlacementPending = pendingWidgetPlacement != null || committingWidgetIds.isNotEmpty()) }
+                if (!committed) {
+                    // DB書き込み直後のキャンセル時も、保存済みIDは削除しない。
+                    withContext(NonCancellable) {
+                        if (pending.appWidgetId !in layoutRepository.getLayoutSnapshot().widgetIds) {
+                            widgetHostManager.deleteAppWidgetId(pending.appWidgetId)
+                        }
+                    }
+                }
             }
-
-            val state = uiState.value
-            val cols = if (pending.isExpandedMode) {
-                state.settings.expandedGridColumns
-            } else {
-                state.settings.compactGridColumns
-            }.coerceAtLeast(3)
-            val rows = if (pending.isExpandedMode) {
-                state.settings.expandedGridRows
-            } else {
-                state.settings.compactGridRows
-            }.coerceAtLeast(3)
-
-            val pageItems = state.layoutItems.filter { it.pageId == pending.pageId }
-            val (assignedPos, assignedSpan) = findBestGridPlacementForSpan(
-                existingItems = pageItems,
-                requestedSpanX = pending.spanX,
-                requestedSpanY = pending.spanY,
-                preferredCell = pending.preferredCell,
-                isExpandedMode = pending.isExpandedMode,
-                columns = cols,
-                rows = rows
-            )
-
-            val newItem = LayoutItem(
-                id = UUID.randomUUID().toString(),
-                pageId = pending.pageId,
-                type = ItemType.WIDGET,
-                packageName = pending.provider.packageName,
-                activityName = pending.provider.className,
-                label = pending.label,
-                compact = assignedPos,
-                expanded = if (pending.isExpandedMode) assignedPos else null,
-                spanX = assignedSpan.first,
-                spanY = assignedSpan.second,
-                appWidgetId = pending.appWidgetId
-            )
-            layoutRepository.upsertLayoutItem(newItem)
-            _pageNavigationEvents.tryEmit(pending.pageId)
         }
     }
 
@@ -1056,7 +1186,8 @@ class LauncherViewModel(
     }
 
     fun resizeWidgetItem(item: LayoutItem, newSpanX: Int, newSpanY: Int) = runIfUnlocked {
-        viewModelScope.launch {
+        launchLayoutEdit { snapshot ->
+            val item = snapshot.items.find { it.id == item.id } ?: return@launchLayoutEdit
             val settings = uiState.value.settings
             val compactCols = settings.compactGridColumns.coerceAtLeast(3)
             val compactRows = settings.compactGridRows.coerceAtLeast(3)
@@ -1088,8 +1219,8 @@ class LauncherViewModel(
     }
 
     fun quickAddAppToHome(app: AppInfo, isExpandedMode: Boolean, context: Context) = runIfUnlocked {
-        viewModelScope.launch {
-            val pos = findFirstAvailableCell(LauncherPage.PAGE_ID_HOME, isExpandedMode)
+        launchLayoutEdit { snapshot ->
+            val pos = findFirstAvailableCell(LauncherPage.PAGE_ID_HOME, isExpandedMode, snapshot)
             val newItem = LayoutItem(
                 id = UUID.randomUUID().toString(),
                 pageId = LauncherPage.PAGE_ID_HOME,
@@ -1106,11 +1237,11 @@ class LauncherViewModel(
     }
 
     fun quickAddAppToDock(app: AppInfo, context: Context) = runIfUnlocked {
-        viewModelScope.launch {
-            val currentDock = uiState.value.dockItems
+        launchLayoutEdit { snapshot ->
+            val currentDock = snapshot.dockItems
             if (currentDock.size >= uiState.value.settings.effectiveDockIconCount) {
                 Toast.makeText(context, "Dockが満杯です。設定でアイコン数を増やしてください", Toast.LENGTH_SHORT).show()
-                return@launch
+                return@launchLayoutEdit
             }
             val newDock = DockItem(
                 id = UUID.randomUUID().toString(),
@@ -1131,8 +1262,10 @@ class LauncherViewModel(
         isExpandedMode: Boolean,
         targetPageId: String = item.pageId
     ) = runIfUnlocked {
-        viewModelScope.launch {
-            val state = uiState.value
+        launchLayoutEdit { snapshot ->
+            val item = snapshot.items.find { it.id == item.id } ?: return@launchLayoutEdit
+            if (targetPageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == targetPageId }) return@launchLayoutEdit
+            val state = layoutState(snapshot)
             val cols = if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns
             val rows = if (isExpandedMode) state.settings.expandedGridRows else state.settings.compactGridRows
             val currentPos = item.resolveClampedPosition(isExpandedMode, cols, rows)
@@ -1186,13 +1319,15 @@ class LauncherViewModel(
         targetPageId: String?,
         isExpandedMode: Boolean
     ) = runIfUnlocked {
-        viewModelScope.launch {
+        launchLayoutEdit { snapshot ->
+            val item = snapshot.items.find { it.id == item.id } ?: return@launchLayoutEdit
             val destinationPageId = if (targetPageId.isNullOrBlank()) {
                 layoutRepository.addUserPage("").id
             } else {
+                if (targetPageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == targetPageId }) return@launchLayoutEdit
                 targetPageId
             }
-            val state = uiState.value
+            val state = layoutState(snapshot)
             val cols = if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns
             val rows = if (isExpandedMode) state.settings.expandedGridRows else state.settings.compactGridRows
             val spanX = item.resolveSpanX(cols)
@@ -1222,39 +1357,41 @@ class LauncherViewModel(
      * ドラッグ中に右端の最終ホームページからさらに右へ移動しようとした際、新しいユーザーページを即座に作成する。
      */
     suspend fun createUserPageForDrag(): LauncherPage? {
-        if (uiState.value.settings.layoutLocked) return null
-        return layoutRepository.addUserPage("")
+        var created: LauncherPage? = null
+        reportLayoutFailure {
+            undoManager.edit {
+                if (!settingsRepository.settings.first().layoutLocked && overlayState.value.isEditMode) {
+                    created = layoutRepository.addUserPage("")
+                }
+            }
+        }
+        return created
     }
 
     fun deleteLayoutItem(item: LayoutItem) = runIfUnlocked {
-        viewModelScope.launch {
+        launchLayoutEdit { _ ->
             if (item.pageId == "dock") {
                 layoutRepository.deleteDockItem(item.id)
             } else {
-                if (item.type == ItemType.WIDGET && item.appWidgetId > 0) {
-                    widgetHostManager.deleteAppWidgetId(item.appWidgetId)
-                }
                 layoutRepository.deleteLayoutItem(item.id)
             }
         }
     }
 
     fun removeDockItem(item: DockItem) = runIfUnlocked {
-        viewModelScope.launch {
+        launchLayoutEdit { _ ->
             layoutRepository.deleteDockItem(item.id)
         }
     }
 
     fun moveDockItem(item: DockItem, delta: Int) = runIfUnlocked {
-        val current = uiState.value.dockItems.toMutableList()
-        val index = current.indexOfFirst { it.id == item.id }
-        if (index == -1) return@runIfUnlocked
-        val targetIndex = (index + delta).coerceIn(0, current.lastIndex)
-        if (targetIndex == index) return@runIfUnlocked
-
-        val removed = current.removeAt(index)
-        current.add(targetIndex, removed)
-        viewModelScope.launch {
+        launchLayoutEdit { snapshot ->
+            val current = snapshot.dockItems.toMutableList()
+            val index = current.indexOfFirst { it.id == item.id }
+            if (index == -1) return@launchLayoutEdit
+            val targetIndex = (index + delta).coerceIn(0, current.lastIndex)
+            if (targetIndex == index) return@launchLayoutEdit
+            current.add(targetIndex, current.removeAt(index))
             layoutRepository.replaceDockItems(current)
         }
     }
@@ -1269,48 +1406,42 @@ class LauncherViewModel(
     }
 
     fun addUserPage(name: String) = runIfUnlocked {
-        viewModelScope.launch {
+        launchLayoutEdit { _ ->
             val newPage = layoutRepository.addUserPage(name)
             _pageNavigationEvents.tryEmit(newPage.id)
         }
     }
 
     fun renameUserPage(pageId: String, newName: String) = runIfUnlocked {
-        viewModelScope.launch {
+        launchLayoutEdit { _ ->
             layoutRepository.renameUserPage(pageId, newName)
         }
     }
 
     fun deleteUserPage(pageId: String) = runIfUnlocked {
-        viewModelScope.launch {
-            // 削除対象ページ内の AppWidget ID も解放する
-            uiState.value.layoutItems
-                .filter { it.pageId == pageId && it.type == ItemType.WIDGET && it.appWidgetId > 0 }
-                .forEach { widgetHostManager.deleteAppWidgetId(it.appWidgetId) }
+        launchLayoutEdit { _ ->
             layoutRepository.deleteUserPage(pageId)
         }
     }
 
     fun moveUserPage(pageId: String, delta: Int) = runIfUnlocked {
-        val pages = uiState.value.userPages.toMutableList()
-        val idx = pages.indexOfFirst { it.id == pageId }
-        if (idx == -1) return@runIfUnlocked
-        val targetIdx = (idx + delta).coerceIn(0, pages.lastIndex)
-        if (targetIdx == idx) return@runIfUnlocked
-
-        val page = pages.removeAt(idx)
-        pages.add(targetIdx, page)
-        viewModelScope.launch {
+        launchLayoutEdit { snapshot ->
+            val pages = snapshot.userPages.toMutableList()
+            val index = pages.indexOfFirst { it.id == pageId }
+            if (index == -1) return@launchLayoutEdit
+            val targetIndex = (index + delta).coerceIn(0, pages.lastIndex)
+            if (targetIndex == index) return@launchLayoutEdit
+            pages.add(targetIndex, pages.removeAt(index))
             layoutRepository.reorderUserPages(pages.map { it.id })
         }
     }
 
     // --- 設定更新 ---
     fun setLayoutLocked(locked: Boolean) {
-        viewModelScope.launch {
+        launchWithoutUndo { _ ->
             settingsRepository.setLayoutLocked(locked)
             if (locked) {
-                overlayState.update { it.copy(isEditMode = false) }
+                exitEditMode()
             }
         }
     }
@@ -1416,7 +1547,7 @@ class LauncherViewModel(
     }
 
     fun restoreSnapshot(snapshotId: Long) {
-        viewModelScope.launch {
+        launchWithoutUndo { _ ->
             silentRebindAttemptedItemIds.clear()
             val result = backupManager.restoreInternalSnapshot(snapshotId)
             overlayState.update {
@@ -1458,7 +1589,7 @@ class LauncherViewModel(
     }
 
     fun importBackupFromUri(context: Context, uri: Uri) {
-        viewModelScope.launch {
+        launchWithoutUndo { _ ->
             silentRebindAttemptedItemIds.clear()
             val result = runCatching {
                 val (bytes, displayName) = withContext(Dispatchers.IO) {
@@ -1518,7 +1649,7 @@ class LauncherViewModel(
     }
 
     fun restoreFromRawJson(jsonText: String) {
-        viewModelScope.launch {
+        launchWithoutUndo { _ ->
             silentRebindAttemptedItemIds.clear()
             val result = backupManager.restoreFromJsonString(jsonText)
             overlayState.update {
@@ -1533,8 +1664,8 @@ class LauncherViewModel(
     }
 
     fun addDemoMissingAppPlaceholder(isExpandedMode: Boolean) {
-        viewModelScope.launch {
-            val pos = findFirstAvailableCell(LauncherPage.PAGE_ID_HOME, isExpandedMode)
+        launchWithoutUndo { snapshot ->
+            val pos = findFirstAvailableCell(LauncherPage.PAGE_ID_HOME, isExpandedMode, snapshot)
             val missingItem = LayoutItem(
                 id = UUID.randomUUID().toString(),
                 pageId = LauncherPage.PAGE_ID_HOME,
@@ -1578,8 +1709,8 @@ class LauncherViewModel(
         appUpdateManager.openUnknownSourcesSettings()
     }
 
-    private fun findFirstAvailableCell(pageId: String, isExpandedMode: Boolean): GridPosition {
-        val state = uiState.value
+    private fun findFirstAvailableCell(pageId: String, isExpandedMode: Boolean, snapshot: LayoutSnapshot? = null): GridPosition {
+        val state = snapshot?.let(::layoutState) ?: uiState.value
         val cols = (if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns).coerceAtLeast(3)
         val rows = (if (isExpandedMode) state.settings.expandedGridRows else state.settings.compactGridRows).coerceAtLeast(3)
         val pageItems = state.layoutItems.filter { it.pageId == pageId }
