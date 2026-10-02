@@ -656,9 +656,8 @@ fun LauncherScreen(
                 rootBoundsInRoot = coords.boundsInRoot()
             }
     ) {
-        if (adaptiveSpec.dockPlacement == DockPlacement.BOTTOM) {
-            // Compact (Fold Closed) -> [Pager + Bottom Dock]
-            Column(modifier = Modifier.fillMaxSize()) {
+        val mainArea: @Composable (Modifier) -> Unit = { areaModifier ->
+            Column(modifier = areaModifier) {
                 EditModeBanner(
                     visible = uiState.overlay.isEditMode,
                     currentPage = currentPage,
@@ -668,34 +667,132 @@ fun LauncherScreen(
                     onFinishEdit = { viewModel.exitEditMode() }
                 )
 
-                HorizontalPager(
-                    state = singlePagerState,
-                    beyondViewportPageCount = pages.size.coerceAtLeast(1),
-                    userScrollEnabled = activeDragState == null,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .onGloballyPositioned { coords ->
-                            pagerBoundsInRoot = coords.boundsInRoot()
+                if (isDualPageMode) {
+                    // 左右2ページ見開きモード（Discover と 設定 は 1ページ全画面固定、他は左右2ページ見開き）
+                    HorizontalPager(
+                        state = dualPagerState,
+                        beyondViewportPageCount = dualSlots.size.coerceAtLeast(1),
+                        userScrollEnabled = activeDragState == null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                pagerBoundsInRoot = coords.boundsInRoot()
+                            }
+                    ) { slotIndex ->
+                        val slot = dualSlots.getOrNull(slotIndex)
+                            ?: ExpandedPagerSlot.SingleFull(LauncherPage.FIXED_HOME)
+
+                        when (slot) {
+                            is ExpandedPagerSlot.SingleFull -> {
+                                LauncherPageContent(
+                                    page = slot.page,
+                                    uiState = uiState,
+                                    adaptiveSpec = adaptiveSpec,
+                                    isHalfPaneInDualMode = false,
+                                    isSettledOnDiscover = isSettledOnDiscover,
+                                    activeDragState = activeDragState,
+                                    highlightedDropCell = if (currentDropTarget?.first == slot.page.id) currentDropTarget.third else null,
+                                    editableHomePages = editableHomePages,
+                                    onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                                    onDragStartItem = handleDragStart,
+                                    onDragUpdateItem = handleDragUpdate,
+                                    onDragEndItem = handleDragEnd,
+                                    onDragCancelItem = handleDragCancel,
+                                    viewModel = viewModel
+                                )
+                            }
+
+                            is ExpandedPagerSlot.DualSpread -> {
+                                Row(modifier = Modifier.fillMaxSize()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                    ) {
+                                        LauncherPageContent(
+                                            page = slot.leftPage,
+                                            uiState = uiState,
+                                            adaptiveSpec = adaptiveSpec,
+                                            isHalfPaneInDualMode = true,
+                                            isSettledOnDiscover = isSettledOnDiscover,
+                                            activeDragState = activeDragState,
+                                            highlightedDropCell = if (currentDropTarget?.first == slot.leftPage.id) currentDropTarget.third else null,
+                                            editableHomePages = editableHomePages,
+                                            onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                                            onDragStartItem = handleDragStart,
+                                            onDragUpdateItem = handleDragUpdate,
+                                            onDragEndItem = handleDragEnd,
+                                            onDragCancelItem = handleDragCancel,
+                                            viewModel = viewModel
+                                        )
+                                    }
+
+                                    VerticalDivider(
+                                        color = Color.White.copy(alpha = 0.12f),
+                                        thickness = 1.dp,
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .padding(vertical = 12.dp)
+                                    )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                    ) {
+                                        LauncherPageContent(
+                                            page = slot.rightPage,
+                                            uiState = uiState,
+                                            adaptiveSpec = adaptiveSpec,
+                                            isHalfPaneInDualMode = true,
+                                            isSettledOnDiscover = isSettledOnDiscover,
+                                            activeDragState = activeDragState,
+                                            highlightedDropCell = if (currentDropTarget?.first == slot.rightPage.id) currentDropTarget.third else null,
+                                            editableHomePages = editableHomePages,
+                                            onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                                            onDragStartItem = handleDragStart,
+                                            onDragUpdateItem = handleDragUpdate,
+                                            onDragEndItem = handleDragEnd,
+                                            onDragCancelItem = handleDragCancel,
+                                            viewModel = viewModel
+                                        )
+                                    }
+                                }
+                            }
                         }
-                ) { pageIndex ->
-                    val page = pages.getOrNull(pageIndex) ?: LauncherPage.FIXED_HOME
-                    LauncherPageContent(
-                        page = page,
-                        uiState = uiState,
-                        adaptiveSpec = adaptiveSpec,
-                        isHalfPaneInDualMode = false,
-                        isSettledOnDiscover = isSettledOnDiscover,
-                        activeDragState = activeDragState,
-                        highlightedDropCell = if (currentDropTarget?.first == page.id) currentDropTarget.third else null,
-                        editableHomePages = editableHomePages,
-                        onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                        onDragStartItem = handleDragStart,
-                        onDragUpdateItem = handleDragUpdate,
-                        onDragEndItem = handleDragEnd,
-                        onDragCancelItem = handleDragCancel,
-                        viewModel = viewModel
-                    )
+                    }
+                } else {
+                    // Expanded 1ページ全画面表示モード
+                    HorizontalPager(
+                        state = singlePagerState,
+                        beyondViewportPageCount = pages.size.coerceAtLeast(1),
+                        userScrollEnabled = activeDragState == null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                pagerBoundsInRoot = coords.boundsInRoot()
+                            }
+                    ) { pageIndex ->
+                        val page = pages.getOrNull(pageIndex) ?: LauncherPage.FIXED_HOME
+                        LauncherPageContent(
+                            page = page,
+                            uiState = uiState,
+                            adaptiveSpec = adaptiveSpec,
+                            isHalfPaneInDualMode = false,
+                            isSettledOnDiscover = isSettledOnDiscover,
+                            activeDragState = activeDragState,
+                            highlightedDropCell = if (currentDropTarget?.first == page.id) currentDropTarget.third else null,
+                            editableHomePages = editableHomePages,
+                            onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
+                            onDragStartItem = handleDragStart,
+                            onDragUpdateItem = handleDragUpdate,
+                            onDragEndItem = handleDragEnd,
+                            onDragCancelItem = handleDragCancel,
+                            viewModel = viewModel
+                        )
+                    }
                 }
 
                 PageIndicatorBar(
@@ -707,212 +804,50 @@ fun LauncherScreen(
                     timeChimeEnabled = uiState.settings.timeChimeEnabled,
                     activeChimeEvent = uiState.overlay.activeChimeEvent,
                     onSelectPage = { idx ->
-                        pages.getOrNull(idx)?.let { viewModel.jumpToPage(it.id) }
+                        val targetPage = pages.getOrNull(idx) ?: return@PageIndicatorBar
+                        if (isDualPageMode) {
+                            val targetSlot = resolveExpandedDualSlotIndex(dualSlots, targetPage.id)
+                                .coerceIn(0, (dualSlots.size - 1).coerceAtLeast(0))
+                            coroutineScope.launch {
+                                dualPagerState.animateScrollToPage(targetSlot)
+                            }
+                        } else {
+                            coroutineScope.launch {
+                                singlePagerState.animateScrollToPage(idx)
+                            }
+                        }
                     },
                     onLongPressIndicator = { viewModel.openHomeEditSheet() },
                     onChimeAnimationFinished = { viewModel.onChimeAnimationFinished() }
                 )
-
-                AdaptiveDock(
-                    dockItems = uiState.dockItems,
-                    installedPackages = uiState.installedPackages,
-                    placement = DockPlacement.BOTTOM,
-                    isEditMode = uiState.overlay.isEditMode,
-                    appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
-                    onDockItemClick = { item, isInstalled ->
-                        viewModel.onDockItemClicked(item, isInstalled)
-                    },
-                    onRemoveDockItem = { viewModel.removeDockItem(it) },
-                    onMoveDockItem = { item, delta -> viewModel.moveDockItem(item, delta) },
-                    onRequestAddDockItem = { viewModel.requestAddItemToDock() }
-                )
+            }
+        }
+        val dock: @Composable () -> Unit = {
+            AdaptiveDock(
+                dockItems = uiState.dockItems,
+                installedPackages = uiState.installedPackages,
+                placement = adaptiveSpec.dockPlacement,
+                iconCount = uiState.settings.effectiveDockIconCount,
+                isEditMode = uiState.overlay.isEditMode,
+                appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
+                onDockItemClick = { item, isInstalled ->
+                    viewModel.onDockItemClicked(item, isInstalled)
+                },
+                onRemoveDockItem = { viewModel.removeDockItem(it) },
+                onMoveDockItem = { item, delta -> viewModel.moveDockItem(item, delta) },
+                onRequestAddDockItem = { viewModel.requestAddItemToDock() }
+            )
+        }
+        if (adaptiveSpec.dockPlacement == DockPlacement.BOTTOM) {
+            Column(Modifier.fillMaxSize()) {
+                mainArea(Modifier.weight(1f).fillMaxWidth())
+                dock()
             }
         } else {
-            // Expanded (Fold Open) -> [Main Area (Dual Page or Single Full) + Right Dock]
-            Row(modifier = Modifier.fillMaxSize()) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxSize()
-                ) {
-                    EditModeBanner(
-                        visible = uiState.overlay.isEditMode,
-                        currentPage = currentPage,
-                        onAddApp = { viewModel.requestAddItemToPage(currentPage, initialTab = 0) },
-                        onAddWidget = { viewModel.requestAddItemToPage(currentPage, initialTab = 1) },
-                        onManagePages = { viewModel.openPageManager() },
-                        onFinishEdit = { viewModel.exitEditMode() }
-                    )
-
-                    if (isDualPageMode) {
-                        // 左右2ページ見開きモード（Discover と 設定 は 1ページ全画面固定、他は左右2ページ見開き）
-                        HorizontalPager(
-                            state = dualPagerState,
-                            beyondViewportPageCount = dualSlots.size.coerceAtLeast(1),
-                            userScrollEnabled = activeDragState == null,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .onGloballyPositioned { coords ->
-                                    pagerBoundsInRoot = coords.boundsInRoot()
-                                }
-                        ) { slotIndex ->
-                            val slot = dualSlots.getOrNull(slotIndex)
-                                ?: ExpandedPagerSlot.SingleFull(LauncherPage.FIXED_HOME)
-
-                            when (slot) {
-                                is ExpandedPagerSlot.SingleFull -> {
-                                    LauncherPageContent(
-                                        page = slot.page,
-                                        uiState = uiState,
-                                        adaptiveSpec = adaptiveSpec,
-                                        isHalfPaneInDualMode = false,
-                                        isSettledOnDiscover = isSettledOnDiscover,
-                                        activeDragState = activeDragState,
-                                        highlightedDropCell = if (currentDropTarget?.first == slot.page.id) currentDropTarget.third else null,
-                                        editableHomePages = editableHomePages,
-                                        onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                                        onDragStartItem = handleDragStart,
-                                        onDragUpdateItem = handleDragUpdate,
-                                        onDragEndItem = handleDragEnd,
-                                        onDragCancelItem = handleDragCancel,
-                                        viewModel = viewModel
-                                    )
-                                }
-
-                                is ExpandedPagerSlot.DualSpread -> {
-                                    Row(modifier = Modifier.fillMaxSize()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .fillMaxHeight()
-                                        ) {
-                                            LauncherPageContent(
-                                                page = slot.leftPage,
-                                                uiState = uiState,
-                                                adaptiveSpec = adaptiveSpec,
-                                                isHalfPaneInDualMode = true,
-                                                isSettledOnDiscover = isSettledOnDiscover,
-                                                activeDragState = activeDragState,
-                                                highlightedDropCell = if (currentDropTarget?.first == slot.leftPage.id) currentDropTarget.third else null,
-                                                editableHomePages = editableHomePages,
-                                                onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                                                onDragStartItem = handleDragStart,
-                                                onDragUpdateItem = handleDragUpdate,
-                                                onDragEndItem = handleDragEnd,
-                                                onDragCancelItem = handleDragCancel,
-                                                viewModel = viewModel
-                                            )
-                                        }
-
-                                        VerticalDivider(
-                                            color = Color.White.copy(alpha = 0.12f),
-                                            thickness = 1.dp,
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .padding(vertical = 12.dp)
-                                        )
-
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .fillMaxHeight()
-                                        ) {
-                                            LauncherPageContent(
-                                                page = slot.rightPage,
-                                                uiState = uiState,
-                                                adaptiveSpec = adaptiveSpec,
-                                                isHalfPaneInDualMode = true,
-                                                isSettledOnDiscover = isSettledOnDiscover,
-                                                activeDragState = activeDragState,
-                                                highlightedDropCell = if (currentDropTarget?.first == slot.rightPage.id) currentDropTarget.third else null,
-                                                editableHomePages = editableHomePages,
-                                                onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                                                onDragStartItem = handleDragStart,
-                                                onDragUpdateItem = handleDragUpdate,
-                                                onDragEndItem = handleDragEnd,
-                                                onDragCancelItem = handleDragCancel,
-                                                viewModel = viewModel
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // Expanded 1ページ全画面表示モード
-                        HorizontalPager(
-                            state = singlePagerState,
-                            beyondViewportPageCount = pages.size.coerceAtLeast(1),
-                            userScrollEnabled = activeDragState == null,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .onGloballyPositioned { coords ->
-                                    pagerBoundsInRoot = coords.boundsInRoot()
-                                }
-                        ) { pageIndex ->
-                            val page = pages.getOrNull(pageIndex) ?: LauncherPage.FIXED_HOME
-                            LauncherPageContent(
-                                page = page,
-                                uiState = uiState,
-                                adaptiveSpec = adaptiveSpec,
-                                isHalfPaneInDualMode = false,
-                                isSettledOnDiscover = isSettledOnDiscover,
-                                activeDragState = activeDragState,
-                                highlightedDropCell = if (currentDropTarget?.first == page.id) currentDropTarget.third else null,
-                                editableHomePages = editableHomePages,
-                                onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                                onDragStartItem = handleDragStart,
-                                onDragUpdateItem = handleDragUpdate,
-                                onDragEndItem = handleDragEnd,
-                                onDragCancelItem = handleDragCancel,
-                                viewModel = viewModel
-                            )
-                        }
-                    }
-
-                    PageIndicatorBar(
-                        pages = pages,
-                        visiblePageIndices = visiblePageIndices,
-                        indicatorStyle = uiState.settings.indicatorStyle,
-                        isLayoutLocked = uiState.settings.layoutLocked,
-                        timeSegment = uiState.overlay.currentTimeSegment,
-                        timeChimeEnabled = uiState.settings.timeChimeEnabled,
-                        activeChimeEvent = uiState.overlay.activeChimeEvent,
-                        onSelectPage = { idx ->
-                            val targetPage = pages.getOrNull(idx) ?: return@PageIndicatorBar
-                            if (isDualPageMode) {
-                                val targetSlot = resolveExpandedDualSlotIndex(dualSlots, targetPage.id)
-                                    .coerceIn(0, (dualSlots.size - 1).coerceAtLeast(0))
-                                coroutineScope.launch {
-                                    dualPagerState.animateScrollToPage(targetSlot)
-                                }
-                            } else {
-                                coroutineScope.launch {
-                                    singlePagerState.animateScrollToPage(idx)
-                                }
-                            }
-                        },
-                        onLongPressIndicator = { viewModel.openHomeEditSheet() },
-                        onChimeAnimationFinished = { viewModel.onChimeAnimationFinished() }
-                    )
-                }
-
-                // Right Dock (Expanded / Fold Open)
-                AdaptiveDock(
-                    dockItems = uiState.dockItems,
-                    installedPackages = uiState.installedPackages,
-                    placement = DockPlacement.RIGHT,
-                    isEditMode = uiState.overlay.isEditMode,
-                    appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
-                    onDockItemClick = { item, isInstalled ->
-                        viewModel.onDockItemClicked(item, isInstalled)
-                    },
-                    onRemoveDockItem = { viewModel.removeDockItem(it) },
-                    onMoveDockItem = { item, delta -> viewModel.moveDockItem(item, delta) },
-                    onRequestAddDockItem = { viewModel.requestAddItemToDock() }
-                )
+            Row(Modifier.fillMaxSize()) {
+                if (adaptiveSpec.dockPlacement == DockPlacement.LEFT) dock()
+                mainArea(Modifier.weight(1f).fillMaxHeight())
+                if (adaptiveSpec.dockPlacement == DockPlacement.RIGHT) dock()
             }
         }
 
@@ -1095,6 +1030,8 @@ fun LauncherScreen(
                 onUpdateTinyIcons = { cc, ce, size, labels ->
                     viewModel.updateTinyIconsConfig(cc, ce, size, labels)
                 },
+                onSetDockIconCount = { viewModel.setDockIconCount(it) },
+                onSetExpandedDockPosition = { viewModel.setExpandedDockPosition(it) },
                 onSelectExpandedLayoutMode = { viewModel.setExpandedPageLayoutMode(it) },
                 onToggleAllAppsLeftOnlyInExpanded = { viewModel.setAllAppsLeftOnlyInExpandedSingle(it) },
                 onSelectIndicatorStyle = { viewModel.setIndicatorStyle(it) },
@@ -1409,6 +1346,8 @@ private fun LauncherPageContent(
                 onUpdateTinyIcons = { cc, ce, size, labels ->
                     viewModel.updateTinyIconsConfig(cc, ce, size, labels)
                 },
+                onSetDockIconCount = { viewModel.setDockIconCount(it) },
+                onSetExpandedDockPosition = { viewModel.setExpandedDockPosition(it) },
                 onSelectExpandedLayoutMode = { viewModel.setExpandedPageLayoutMode(it) },
                 onToggleAllAppsLeftOnlyInExpanded = { viewModel.setAllAppsLeftOnlyInExpandedSingle(it) },
                 onSelectIndicatorStyle = { viewModel.setIndicatorStyle(it) },

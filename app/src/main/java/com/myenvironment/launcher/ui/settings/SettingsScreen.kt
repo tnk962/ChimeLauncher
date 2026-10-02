@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.ui.settings
 
+import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -90,6 +91,8 @@ fun SettingsScreen(
     onUpdateCompactGrid: (Int, Int) -> Unit,
     onUpdateExpandedGrid: (Int, Int) -> Unit,
     onUpdateTinyIcons: (Int, Int, Int, Boolean) -> Unit,
+    onSetDockIconCount: (Int) -> Unit,
+    onSetExpandedDockPosition: (ExpandedDockPosition) -> Unit,
     onSelectExpandedLayoutMode: (ExpandedPageLayoutMode) -> Unit,
     onToggleAllAppsLeftOnlyInExpanded: (Boolean) -> Unit,
     onSelectIndicatorStyle: (IndicatorStyle) -> Unit = {},
@@ -496,6 +499,21 @@ fun SettingsScreen(
                     )
                 }
 
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+
+                Text("Dockのアイコン数: ${settings.effectiveDockIconCount}個", color = Color.White)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onSetDockIconCount(settings.effectiveDockIconCount - 1) }, enabled = settings.effectiveDockIconCount > 1) { Text("−") }
+                    OutlinedButton(onClick = { onSetDockIconCount(settings.effectiveDockIconCount + 1) }, enabled = settings.effectiveDockIconCount < 12) { Text("＋") }
+                }
+                Text("1〜12個。枠を超えた登録アイコンは保持され、数を増やすと再表示されます。横・縦にスクロールできます。", color = Color(0xFF9AA0A6), fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                Text("Fold展開時のDock位置", color = Color.White)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ExpandedDockPosition.entries.forEach { position ->
+                        OutlinedButton(onClick = { onSetExpandedDockPosition(position) }, enabled = settings.expandedDockPosition != position) { Text(position.displayName) }
+                    }
+                }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
 
                 Text(

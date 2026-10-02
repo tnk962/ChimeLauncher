@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.core.storage
 
+import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -29,6 +30,8 @@ class DataStoreSettingsRepository(
 ) : SettingsRepository {
 
     private object Keys {
+        val DOCK_ICON_COUNT = intPreferencesKey("dock_icon_count")
+        val EXPANDED_DOCK_POSITION = stringPreferencesKey("expanded_dock_position")
         val INITIALIZED = booleanPreferencesKey("initialized_default_layout")
         val LAYOUT_LOCKED = booleanPreferencesKey("layout_locked")
         val COMPACT_COLS = intPreferencesKey("compact_grid_columns")
@@ -76,6 +79,10 @@ class DataStoreSettingsRepository(
         } ?: default.returnChimeInterval
 
         LauncherSettings(
+            dockIconCount = (prefs[Keys.DOCK_ICON_COUNT] ?: default.dockIconCount).coerceIn(1, 12),
+            expandedDockPosition = prefs[Keys.EXPANDED_DOCK_POSITION]?.let {
+                runCatching { ExpandedDockPosition.valueOf(it) }.getOrNull()
+            } ?: default.expandedDockPosition,
             layoutLocked = prefs[Keys.LAYOUT_LOCKED] ?: default.layoutLocked,
             compactGridColumns = prefs[Keys.COMPACT_COLS] ?: default.compactGridColumns,
             compactGridRows = prefs[Keys.COMPACT_ROWS] ?: default.compactGridRows,
@@ -115,6 +122,14 @@ class DataStoreSettingsRepository(
         appContext.launcherDataStore.edit { prefs ->
             prefs[Keys.INITIALIZED] = true
         }
+    }
+
+    override suspend fun setDockIconCount(count: Int) {
+        appContext.launcherDataStore.edit { it[Keys.DOCK_ICON_COUNT] = count.coerceIn(1, 12) }
+    }
+
+    override suspend fun setExpandedDockPosition(position: ExpandedDockPosition) {
+        appContext.launcherDataStore.edit { it[Keys.EXPANDED_DOCK_POSITION] = position.name }
     }
 
     override suspend fun setLayoutLocked(locked: Boolean) {
@@ -225,6 +240,8 @@ class DataStoreSettingsRepository(
 
     override suspend fun replaceSettings(newSettings: LauncherSettings) {
         appContext.launcherDataStore.edit { prefs ->
+            prefs[Keys.DOCK_ICON_COUNT] = newSettings.effectiveDockIconCount
+            prefs[Keys.EXPANDED_DOCK_POSITION] = newSettings.expandedDockPosition.name
             prefs[Keys.LAYOUT_LOCKED] = newSettings.layoutLocked
             prefs[Keys.COMPACT_COLS] = newSettings.compactGridColumns
             prefs[Keys.COMPACT_ROWS] = newSettings.compactGridRows

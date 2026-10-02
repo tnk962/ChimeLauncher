@@ -58,8 +58,13 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
   3. **Recently Installed**（直近30日以内にインストールしたアプリ）
 - **文字入力時**: `1. 完全一致 → 2. 前方一致 → 3. 部分一致 → 4. 利用頻度ボーナス` の優先順でアプリ・ショートカット・アクション・Web検索を高速表示します。
 
-### 4. Adaptive Fold UI (`Bottom Dock` ↔ `Right Dock` & 左右2ページ見開き)
-- `WindowWidthSizeClass` に基づき、折りたたみ閉状態（Compact）では **下部 Dock + 1ページ表示**、展開状態（Expanded）では **右端 Dock + 左右2ページ見開き表示 (`DUAL_PAGE`)**（Discover と 設定ページは1ページ全画面固定）または **1ページ全画面表示 (`SINGLE_FULL`)** に自動適応します。
+### 4. Adaptive Fold UI（Dock位置の選択 & 左右2ページ見開き）
+
+- `WindowWidthSizeClass` に基づき、折りたたみ閉状態（Compact）では **下部 Dock + 1ページ表示**、展開状態（Expanded）では **左右2ページ見開き表示 (`DUAL_PAGE`)**（Discover と 設定ページは1ページ全画面固定）または **1ページ全画面表示 (`SINGLE_FULL`)** に自動適応します。
+- **未リリースのDock設定**: 設定画面の **「Dockのアイコン数」** の `−` / `＋` で表示・追加できる上限を **1〜12個** に変更できます（初期値は7個）。入りきらないアイコンはDock内で横・縦にスクロールできます。
+- **「Fold展開時のDock位置」** で **下・左・右** を選択できます（初期値は右）。下を選んでも見開き表示を維持し、Foldを閉じると下部Dockに戻ります。
+- 個数を減らした場合、上限を超えた登録済みアイコンは削除されず非表示になり、個数を増やすと再表示されます。アイコンの追加・並べ替え・削除は編集モードまたは長押しメニューから行います。
+- Dock設定は保存され、JSONバックアップ・復元にも含まれます。旧バックアップでDock設定がない場合は、7個・展開時は右の初期値を使用します。公開済みv1.2.0にはこの設定変更は含まれていません。
 
 ### 5. 高密度 AppWidget 対応 & ページ跨ぎドラッグ移動
 - 任意の Android ウィジェットを配置・リサイズ（`spanX × spanY`）でき、余白を極限まで削った高情報密度スケーリングで表示します。
@@ -86,4 +91,4 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-詳細な変更履歴は [CHANGELOG.md](file:///Users/yohei/projects/TodoActions/AndroidLauncher/CHANGELOG.md) を参照してください。
+詳細な変更履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
