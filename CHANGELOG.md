@@ -8,6 +8,17 @@
 
 ### Added & Changed
 
+- **Fold展開時のAll Apps全面表示**（[Issue #5](https://github.com/tnk962/ChimeLauncher/issues/5)）:
+  - 見開きモードでもAll Appsを独立した1ページで表示し、Dockを除く領域全体を使用。HOME・追加ページの見開き表示を維持。
+  - 半分表示の切替を廃止し、保存済みの旧設定にかかわらず全面表示。
+  - 全面表示のAll AppsからHOMEへ追加する際、登録先の見開き／全面グリッドに応じて配置。
+  - Fold開閉時、表示中のペイン内にあるページへの復帰先を保持。
+  - **検証**: ユニットテスト54件成功、Debug / Release APKビルド成功。All Apps全面表示はユーザーによる実機動作確認済み。
+- **Google Discover接続の互換性と切断処理を修正**:
+  - クライアント版10を申告し、Bundle形式の準備完了・スクロール通知に対応。従来の通知形式も維持。
+  - Companionの中継Binderが接続仕様の識別文字列を返し、Google側の切断をLauncherへ通知。通信失敗とプロトコル不一致を区別し、切断時に再接続。
+  - 接続・画面登録・通知の診断ログを追加。
+  - **検証**: 本体・CompanionのDebug / Release APKビルド成功。両APK更新後の接続復旧はユーザーによる実機動作確認済み。Novaとの競合が原因だったかは未確定。
 - **レイアウト編集のUndo**（[Issue #3](https://github.com/tnk962/ChimeLauncher/issues/3)）:
   - 編集バーに「元に戻す」と履歴数を表示し、直近20操作まで取り消し可能に。
   - ホームとDockのアイテム編集、ページの追加・名前変更・並べ替え・削除、ウィジェット編集に対応。Compact / Expandedの配置、ページ内のアイテム、ウィジェットIDを復元。

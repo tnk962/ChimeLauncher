@@ -94,7 +94,6 @@ fun SettingsScreen(
     onSetDockIconCount: (Int) -> Unit,
     onSetExpandedDockPosition: (ExpandedDockPosition) -> Unit,
     onSelectExpandedLayoutMode: (ExpandedPageLayoutMode) -> Unit,
-    onToggleAllAppsLeftOnlyInExpanded: (Boolean) -> Unit,
     onSelectIndicatorStyle: (IndicatorStyle) -> Unit = {},
     onToggleFirstChime: (Boolean) -> Unit = {},
     onToggleReturnChime: (Boolean) -> Unit = {},
@@ -438,7 +437,9 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = mode.description,
+                                text = if (mode == ExpandedPageLayoutMode.DUAL_PAGE) {
+                                    "HOMEと追加ページを左右2ページで表示します。Discover・All Apps・設定は全面表示です"
+                                } else mode.description,
                                 color = Color(0xFF9AA0A6),
                                 fontSize = 11.sp
                             )
@@ -446,32 +447,6 @@ fun SettingsScreen(
                     }
                 }
 
-                if (settings.expandedPageLayoutMode == ExpandedPageLayoutMode.SINGLE_FULL) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "開いた時のAll Appsを左側半分だけに表示",
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "OFFの場合は全画面幅で表示、ONの場合は左側半分に寄せて表示します",
-                                color = Color(0xFF9AA0A6),
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = settings.allAppsLeftOnlyInExpandedSingle,
-                            onCheckedChange = onToggleAllAppsLeftOnlyInExpanded
-                        )
-                    }
-                }
             }
 
             // 2. ホーム画面とレイアウトロック (仕様 11, 15, 20)

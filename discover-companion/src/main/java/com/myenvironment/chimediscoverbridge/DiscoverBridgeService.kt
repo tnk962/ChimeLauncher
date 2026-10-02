@@ -13,6 +13,7 @@ import android.os.Looper
 import android.os.Parcel
 import android.os.Process
 import android.os.RemoteException
+import android.util.Log
 import com.myenvironment.discoverprotocol.DiscoverContract
 import com.myenvironment.discoverprotocol.IDiscoverBridge
 import com.myenvironment.discoverprotocol.IDiscoverBridgeCallback
@@ -23,6 +24,8 @@ class DiscoverBridgeService : Service() {
     private var connection: ServiceConnection? = null
     private var callback: IDiscoverBridgeCallback? = null
     private var clientDeath: IBinder.DeathRecipient? = null
+    private var googleBinder: IBinder? = null
+    private var googleDeath: IBinder.DeathRecipient? = null
 
     private fun enforceClient() {
         val uid = Binder.getCallingUid()
@@ -61,7 +64,7 @@ class DiscoverBridgeService : Service() {
             .setPackage(DiscoverContract.GOOGLE_PACKAGE)
             .setData(Uri.parse("app://$packageName:${Process.myUid()}")
                 .buildUpon().appendQueryParameter("v", "7")
-                .appendQueryParameter("cv", "9").build())
+                .appendQueryParameter("cv", "10").build())
         val info = packageManager.resolveService(intent, PackageManager.GET_META_DATA)
         if (info == null) {
             reportError("Google AppのDiscoverサービスが見つかりません")
@@ -71,6 +74,7 @@ class DiscoverBridgeService : Service() {
         val conn = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName, service: IBinder) {
                 if (connection !== this) return
+                Log.d("ChimeDiscoverBridge", "Google overlay service connected")
                 try {
                     if (name.packageName != DiscoverContract.GOOGLE_PACKAGE ||
                         service.interfaceDescriptor != DiscoverContract.OVERLAY_DESCRIPTOR
@@ -78,17 +82,20 @@ class DiscoverBridgeService : Service() {
                         reportError("Google AppのDiscover接続仕様が対応形式と異なります")
                         return
                     }
-                    cb.onConnected(ForwardingBinder(service), apiVersion)
+                    val death = IBinder.DeathRecipient {
+                        main.post { googleDisconnected(this) }
+                    }
+                    googleBinder = service
+                    googleDeath = death
+                    service.linkToDeath(death, 0)
+                    cb.onConnected(ForwardingBinder(service, this), apiVersion)
                 } catch (_: RemoteException) {
-                    disconnectGoogle()
+                    googleDisconnected(this)
                 }
             }
 
             override fun onServiceDisconnected(name: ComponentName) {
-                if (connection === this) {
-                    runCatching { cb.onDisconnected() }
-                    disconnectGoogle()
-                }
+                googleDisconnected(this)
             }
 
             override fun onBindingDied(name: ComponentName) = onServiceDisconnected(name)
@@ -111,12 +118,40 @@ class DiscoverBridgeService : Service() {
         }
     }
 
-    private inner class ForwardingBinder(private val google: IBinder) : Binder() {
+    private fun googleDisconnected(conn: ServiceConnection) {
+        if (connection !== conn) return
+        Log.w("ChimeDiscoverBridge", "Google overlay disconnected")
+        runCatching { callback?.onDisconnected() }
+        disconnectGoogle()
+    }
+
+    private inner class ForwardingBinder(
+        private val google: IBinder,
+        private val conn: ServiceConnection
+    ) : Binder() {
+        init {
+            // This proxy exposes Google's wire protocol, without a local implementation.
+            attachInterface(null, DiscoverContract.OVERLAY_DESCRIPTOR)
+        }
+
         override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
             enforceClient()
+            if (code == IBinder.INTERFACE_TRANSACTION) {
+                reply?.writeString(DiscoverContract.OVERLAY_DESCRIPTOR)
+                return true
+            }
             val identity = Binder.clearCallingIdentity()
             return try {
-                google.transact(code, data, reply, flags)
+                val accepted = google.transact(code, data, reply, flags)
+                Log.d("ChimeDiscoverBridge", "Forwarded transaction code=$code accepted=$accepted")
+                accepted
+            } catch (e: RemoteException) {
+                Log.w("ChimeDiscoverBridge", "Google transaction failed; code=$code", e)
+                main.post { googleDisconnected(conn) }
+                // Binder cannot marshal RemoteException with Parcel.writeException.
+                // One-way calls report the failure through the bridge callback instead.
+                if (flags and IBinder.FLAG_ONEWAY != 0) return true
+                throw IllegalStateException("Google Discover connection was lost", e)
             } finally {
                 Binder.restoreCallingIdentity(identity)
             }
@@ -124,11 +159,18 @@ class DiscoverBridgeService : Service() {
     }
 
     private fun reportError(message: String) {
+        Log.w("ChimeDiscoverBridge", message)
         runCatching { callback?.onError(message) }
         disconnectGoogle()
     }
 
     private fun disconnectGoogle() {
+        val googleRecipient = googleDeath
+        if (googleRecipient != null) {
+            runCatching { googleBinder?.unlinkToDeath(googleRecipient, 0) }
+        }
+        googleBinder = null
+        googleDeath = null
         connection?.let { runCatching { unbindService(it) } }
         connection = null
         val death = clientDeath

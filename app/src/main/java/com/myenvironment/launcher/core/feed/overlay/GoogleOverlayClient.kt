@@ -13,6 +13,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Parcel
+import android.util.Log
 import android.view.WindowManager
 import androidx.core.content.ContextCompat
 import com.google.android.libraries.launcherclient.ILauncherOverlay
@@ -132,14 +134,41 @@ class GoogleOverlayClient(private val activity: Activity) {
                 if (!trusted()) return
                 main.post {
                     if (session != generation) return@post
-                    val descriptor = runCatching { binder.interfaceDescriptor }.getOrNull()
+                    val descriptor = try {
+                        binder.interfaceDescriptor
+                    } catch (e: Exception) {
+                        Log.w("ChimeDiscover", "Overlay descriptor query failed", e)
+                        fail("Google Discoverとの通信が切れました。再接続します", true)
+                        return@post
+                    }
                     if (descriptor != DiscoverContract.OVERLAY_DESCRIPTOR) {
+                        Log.w("ChimeDiscover", "Unexpected overlay descriptor: $descriptor")
                         fail("Companionのプロトコルが一致しません", false)
                         return@post
                     }
                     overlay = ILauncherOverlay.Stub.asInterface(binder)
+                    Log.d("ChimeDiscover", "Overlay connected; API $version")
                     apiVersion = version
                     callback = object : ILauncherOverlayCallback.Stub() {
+                        // Recent Google App versions combine status and scroll updates
+                        // in callback transaction 3. Keep legacy transactions 1 and 2.
+                        override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+                            if (code != IBinder.FIRST_CALL_TRANSACTION + 2) {
+                                return super.onTransact(code, data, reply, flags)
+                            }
+                            data.enforceInterface("com.google.android.libraries.launcherclient.ILauncherOverlayCallback")
+                            val update = data.readTypedObject(Bundle.CREATOR)
+                            require(data.dataAvail() == 0) { "Unexpected overlay callback data" }
+                            Log.d("ChimeDiscover", "Overlay Bundle callback: ${update?.keySet()}")
+                            if (update?.containsKey("service_status") == true) {
+                                overlayStatusChanged(update.getInt("service_status"))
+                            }
+                            if (update?.containsKey("scroll") == true) {
+                                overlayScrollChanged(update.getFloat("scroll"))
+                            }
+                            return true
+                        }
+
                         override fun overlayScrollChanged(progress: Float) {
                             main.post {
                                 if (session == generation && progress.isFinite()) {
@@ -151,6 +180,7 @@ class GoogleOverlayClient(private val activity: Activity) {
                             main.post {
                                 if (session == generation) {
                                     val ready = status and 1 != 0 && attached
+                                    Log.d("ChimeDiscover", "Overlay status=$status attached=$attached")
                                     mutableState.value = state.value.copy(ready = ready,
                                         progress = if (ready) state.value.progress else 0f,
                                         message = if (ready) "さらに右へスワイプするとGoogle Discoverを表示します" else "Google Discoverは現在利用できません")
@@ -210,14 +240,19 @@ class GoogleOverlayClient(private val activity: Activity) {
     }
 
     private fun attachWindow() {
+        Log.d("ChimeDiscover", "Attach request: attached=$attached overlay=${overlay != null} callback=${callback != null}")
         if (!attached || overlay == null || callback == null) return
         val attrs = WindowManager.LayoutParams().apply { copyFrom(activity.window.attributes) }
         // Google creates an application-level window (type 4), not a child window.
         // View.windowToken identifies ViewRoot's window and is rejected as BadToken.
         attrs.token = activity.window.attributes.token
             ?: activity.window.decorView.applicationWindowToken
-            ?: return
+            ?: run {
+                Log.w("ChimeDiscover", "Attach deferred: application window token is missing")
+                return
+            }
         val cb = callback!!
+        Log.d("ChimeDiscover", "Registering window; API=$apiVersion")
         call {
             if (apiVersion >= 3) {
                 windowAttached2(Bundle().apply {
@@ -259,6 +294,7 @@ class GoogleOverlayClient(private val activity: Activity) {
     }
 
     private fun fail(message: String, retry: Boolean) {
+        Log.w("ChimeDiscover", "$message; retry=$retry")
         disconnect()
         mutableState.value = GoogleOverlayState(message = message)
         if (retry && started && enabled && !destroyed) {
