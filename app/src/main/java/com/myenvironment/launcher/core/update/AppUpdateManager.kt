@@ -42,7 +42,10 @@ data class ReleaseUpdateInfo(
     val apkDownloadUrl: String?,
     val apkFileName: String?,
     val apkSizeBytes: Long,
-    val publishedAt: String
+    val publishedAt: String,
+    val companionDownloadUrl: String? = null,
+    val companionFileName: String? = null,
+    val companionSizeBytes: Long = 0L
 )
 
 /**
@@ -75,7 +78,8 @@ sealed interface AppUpdateState {
     data class ReadyToInstall(
         val latestRelease: ReleaseUpdateInfo,
         val apkFilePath: String,
-        val requiresInstallPermission: Boolean = false
+        val requiresInstallPermission: Boolean = false,
+        val companionFilePath: String? = null
     ) : AppUpdateState
 
     data class Error(
@@ -173,6 +177,17 @@ object AppUpdateParser {
                 !name.contains("debug", ignoreCase = true)
             } ?: launcherAssets.firstOrNull()
 
+            val companionAsset = assetObjects.filter { obj ->
+                val name = obj["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                (name.startsWith("GoogleDiscoverCompanion-", ignoreCase = true) ||
+                    name.startsWith("ChimeDiscoverCompanion-", ignoreCase = true)) &&
+                    name.endsWith(".apk", ignoreCase = true)
+            }.let { candidates ->
+                candidates.firstOrNull {
+                    !it["name"]?.jsonPrimitive?.contentOrNull.orEmpty().contains("debug", ignoreCase = true)
+                } ?: candidates.firstOrNull()
+            }
+
             val apkDownloadUrl = preferredAsset?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
             val apkFileName = preferredAsset?.get("name")?.jsonPrimitive?.contentOrNull
             val apkSizeBytes = preferredAsset?.get("size")?.jsonPrimitive?.longOrNull ?: 0L
@@ -186,7 +201,10 @@ object AppUpdateParser {
                 apkDownloadUrl = apkDownloadUrl,
                 apkFileName = apkFileName,
                 apkSizeBytes = apkSizeBytes,
-                publishedAt = publishedAt
+                publishedAt = publishedAt,
+                companionDownloadUrl = companionAsset?.get("browser_download_url")?.jsonPrimitive?.contentOrNull,
+                companionFileName = companionAsset?.get("name")?.jsonPrimitive?.contentOrNull,
+                companionSizeBytes = companionAsset?.get("size")?.jsonPrimitive?.longOrNull ?: 0L
             )
         }.getOrNull()
     }
@@ -211,7 +229,8 @@ class AppUpdateManager(
      */
     fun checkForUpdatesAutoIfNeeded(nowMillis: Long = System.currentTimeMillis()) {
         val currentState = _updateState.value
-        if (currentState is AppUpdateState.Checking || currentState is AppUpdateState.Downloading) {
+        if (currentState is AppUpdateState.Checking || currentState is AppUpdateState.Downloading ||
+            currentState is AppUpdateState.ReadyToInstall) {
             return
         }
         if (nowMillis - lastCheckedAtMillis < AUTO_CHECK_INTERVAL_MS && currentState !is AppUpdateState.Idle) {
@@ -273,53 +292,53 @@ class AppUpdateManager(
 
         if (_updateState.value is AppUpdateState.Downloading) return
 
+        _updateState.value = AppUpdateState.Downloading(release, 0, 0L, release.apkSizeBytes + release.companionSizeBytes)
         scope.launch {
-            _updateState.value = AppUpdateState.Downloading(
-                latestRelease = release,
-                progressPercent = 0,
-                downloadedBytes = 0L,
-                totalBytes = release.apkSizeBytes
-            )
-
             runCatching {
-                val updatesDir = File(context.cacheDir, "updates").apply {
-                    if (!exists()) mkdirs()
-                }
-                val targetFile = File(updatesDir, "ChimeLauncher-${release.tagName}.apk")
-                val tempFile = File(updatesDir, "ChimeLauncher-${release.tagName}.apk.part")
-                if (tempFile.exists()) tempFile.delete()
-
-                downloadFileWithRedirects(
-                    urlStr = downloadUrl,
-                    destination = tempFile,
-                    expectedBytes = release.apkSizeBytes
-                ) { downloaded, total ->
-                    val percent = if (total > 0L) {
-                        ((downloaded * 100L) / total).toInt().coerceIn(0, 100)
-                    } else {
-                        -1
+                val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
+                val totalBytes = release.apkSizeBytes + release.companionSizeBytes
+                var completedBytes = 0L
+                fun download(url: String, name: String, expectedBytes: Long, packageName: String): File {
+                    val target = File(updatesDir, name)
+                    val temporary = File(updatesDir, "pending-$name")
+                    try {
+                        downloadFileWithRedirects(url, temporary, expectedBytes) { downloaded, _ ->
+                            val progress = completedBytes + downloaded
+                            _updateState.value = AppUpdateState.Downloading(
+                                release,
+                                if (totalBytes > 0) ((progress * 100) / totalBytes).toInt().coerceIn(0, 100) else -1,
+                                progress,
+                                totalBytes
+                            )
+                        }
+                        check(temporary.length() > 0L) { "APKが空です" }
+                        check(expectedBytes <= 0L || temporary.length() == expectedBytes) { "APKのサイズが一致しません" }
+                        val packageInfo = context.packageManager.getPackageArchiveInfo(temporary.absolutePath, 0)
+                        check(packageInfo?.packageName == packageName) { "APKのパッケージが一致しません" }
+                        check(packageInfo?.versionName == release.versionName) { "APKのバージョンが一致しません" }
+                        check(!target.exists() || target.delete()) { "保存済みAPKを更新できません" }
+                        check(temporary.renameTo(target)) { "APKを保存できません" }
+                        completedBytes += target.length()
+                        return target
+                    } finally {
+                        temporary.delete()
                     }
-                    _updateState.value = AppUpdateState.Downloading(
-                        latestRelease = release,
-                        progressPercent = percent,
-                        downloadedBytes = downloaded,
-                        totalBytes = total
-                    )
                 }
-
-                if (targetFile.exists()) targetFile.delete()
-                tempFile.renameTo(targetFile)
-                targetFile
+                val companion = release.companionDownloadUrl?.takeIf { it.isNotBlank() }?.let {
+                    download(it, "GoogleDiscoverCompanion-${release.tagName}.apk", release.companionSizeBytes, "com.myenvironment.chimediscoverbridge")
+                }
+                val launcher = download(downloadUrl, "ChimeLauncher-${release.tagName}.apk", release.apkSizeBytes, context.packageName)
+                launcher to companion
             }.fold(
-                onSuccess = { apkFile ->
-                    val canInstall = canRequestPackageInstalls()
+                onSuccess = { (launcher, companion) ->
                     _updateState.value = AppUpdateState.ReadyToInstall(
                         latestRelease = release,
-                        apkFilePath = apkFile.absolutePath,
-                        requiresInstallPermission = !canInstall
+                        apkFilePath = launcher.absolutePath,
+                        requiresInstallPermission = !canRequestPackageInstalls(),
+                        companionFilePath = companion?.absolutePath
                     )
                     withContext(Dispatchers.Main) {
-                        triggerPackageInstaller(apkFile)
+                        triggerPackageInstaller(companion ?: launcher)
                     }
                 },
                 onFailure = { err ->

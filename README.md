@@ -1,4 +1,6 @@
-# Chime Launcher (v1.3.1)
+# Chime Launcher (v1.3.2 準備中)
+
+v1.3.2は実機確認待ちです。設定画面上部の「HOMEへ」ボタンをタイトル・ビルド情報とは別の行に配置しました。設定画面から本体・Companionをまとめてダウンロードでき、Companion→本体の順でインストールできます（Androidの確認は各APKで必要）。First Chime・Return Chimeの有効化とReturnの待ち時間変更時には、設定内で動きを1回プレビューします。正式リリースは確認後に行います。
 
 v1.3.1では、All Apps設定の列数・サイズ操作を2行に分け、狭い画面での表示を改善しました。システム設定のSpotify例ボタンも削除しました。[正式版v1.3.1](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.1)から本体とGoogleDiscoverCompanionの2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。SC-56F / Android 16のカバー画面でDiscoverの開閉・再表示・ホーム復帰を確認済みです。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
 
