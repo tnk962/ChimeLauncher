@@ -1,10 +1,10 @@
-# Chime Launcher (v1.3.4)
+# Chime Launcher (v1.3.5)
 
-[正式版v1.3.4](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.4)を公開済みです。本体は **Build 20**、Chime Discover Companionは **Build 8**。ユーザーによる実機動作確認と、公開APKの再インストール確認が完了しています。
+[正式版v1.3.5](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.5)向けの実装です。本体は **Build 26**、Chime Discover Companionは **Build 9**。ユーザーによるpreview05の実機動作確認が完了し、正式公開を承認済みです。正式版APKの再インストールは未確認です。
 
-v1.3.4では、検索・All Appsからホーム／Dockへのドラッグ登録、Dockアイコンのドラッグ並べ替え、ドラッグ中に別の指でホームページを送る操作に対応しました。既存の長押しメニューも引き続き利用できます。更新処理はダウンロード直前に最新版を再確認し、古い公開版へのダウングレードを防ぎます。
+v1.3.5ではGoogle Discoverと独自フィードを個別の表示トグルに変更しました。GoogleのみONならHOME→All Apps→Google Discoverの順に移動します。Google Appの自動起動設定を廃止し、設定変更時のスクロール位置を保持。HOMEで戻る操作をしても画面を維持します。
 
-Google Discoverを利用する場合はCompanion→本体の順に2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。SC-56F / Android 16のカバー画面でDiscoverの開閉・再表示・ホーム復帰を確認済みです。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
+Google Discoverを利用する場合はCompanion→本体の順に2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
 
 > **Chimeは通知しない。気づかせる。**  
 > *Chime Moments are ambient, not interruptive.*
@@ -19,10 +19,10 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ### 1. 初回 APK をダウンロードする
 1. このリポジトリの **[Releases（最新リリース）](https://github.com/tnk962/ChimeLauncher/releases/latest)** ページを開きます。
-2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.4.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.4.apk`** も導入してください。
+2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.5.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.5.apk`** も導入してください。
 
 ### 2. Android 端末にインストールする
-1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリからAPKを開きます。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.4.apk`** → **`ChimeLauncher-v1.3.4.apk`** の順でインストールしてください。本体のみの場合は **`ChimeLauncher-v1.3.4.apk`** を開きます。
+1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリからAPKを開きます。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.5.apk`** → **`ChimeLauncher-v1.3.5.apk`** の順でインストールしてください。本体のみの場合は **`ChimeLauncher-v1.3.5.apk`** を開きます。
 2. 初回のみ「この提供元の不明なアプリをインストールしますか？」と表示された場合は、**「設定」→「この提供元のアプリを許可」** を ON にして「インストール」をタップします。
 3. **Google Play プロテクトの確認が表示された場合**:
    - 個人開発の配布用 APK のため、「Play プロテクトによりブロックされました」や「スキャンしますか？」と表示されることがあります。
@@ -102,7 +102,7 @@ All Appsの「左側半分だけに表示」の切替は廃止し、以前その
 
 ### 6. Discover ページ（AI・リゼロ・はてなブックマーク統合フィード）
 - 左端ページに `おすすめ (AI・リゼロ)` / `AI・OpenAI` / `リゼロ・アニメ` / `はてブ 総合` / `はてブ IT` / `ビジネス・政治` の6ジャンル RSS/Atom リーダーを内蔵。
-- Companion導入時は、独自フィードのさらに左へのドラッグをGoogle Discover overlayへ連続して渡します。Companionが利用できない場合は状態を表示し、Googleボタンから別画面として開けます。
+- 設定の「フィード表示」でGoogle Discoverと独自フィードを個別にON/OFFできます。両方ONなら独自フィードのさらに左でGoogle Discover、GoogleのみONならAll Appsのさらに左でGoogle Discoverを表示します。両方OFFならAll Appsが左端になります。Google DiscoverにはCompanionが必要です。
 
 ### 7. JSON / Nova Launcher バックアップ復元 & 別端末アプリ自動解決
 - `.json` バックアップの保存・エクスポートに加え、**Nova Launcher のバックアップ（`.novabackup` / `.db` / `.zip`）** の直接インポートに対応。
