@@ -1,6 +1,8 @@
-# Chime Launcher (v1.3.1)
+# Chime Launcher (v1.3.2)
 
-v1.3.1では、All Apps設定の列数・サイズ操作を2行に分け、狭い画面での表示を改善しました。システム設定のSpotify例ボタンも削除しました。[正式版v1.3.1](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.1)から本体とGoogleDiscoverCompanionの2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。SC-56F / Android 16のカバー画面でDiscoverの開閉・再表示・ホーム復帰を確認済みです。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
+v1.3.2は実機確認済みです。設定画面上部は「Chime Launcher 設定」と「HOMEへ」を上段、バージョン・ビルド情報を下段に配置しました。設定画面から本体・Companionをまとめてダウンロードでき、Companion→本体の順でインストールできます（Androidの確認は各APKで必要）。First Chime・Return Chimeの有効化とReturnの待ち時間変更時には、設定内で動きを1回プレビューします。ホームの下スワイプは、縦方向への十分な移動を判定し、指を離してから通知を開くよう調整しました。
+
+All Apps設定の列数・サイズ操作は2行に分け、システム設定のSpotify例ボタンは削除済みです。[正式版v1.3.2](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.2)から本体とGoogleDiscoverCompanionの2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。SC-56F / Android 16のカバー画面でDiscoverの開閉・再表示・ホーム復帰を確認済みです。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
 
 > **Chimeは通知しない。気づかせる。**  
 > *Chime Moments are ambient, not interruptive.*
@@ -15,10 +17,10 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ### 1. 初回 APK をダウンロードする
 1. このリポジトリの **[Releases（最新リリース）](../../releases/latest)** ページを開きます。
-2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.1.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`GoogleDiscoverCompanion-v1.3.1.apk`** も導入してください。
+2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.2.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`GoogleDiscoverCompanion-v1.3.2.apk`** も導入してください。
 
 ### 2. Android 端末にインストールする
-1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリから **`ChimeLauncher-v1.3.1.apk`** を開きます。
+1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリから **`ChimeLauncher-v1.3.2.apk`** を開きます。
 2. 初回のみ「この提供元の不明なアプリをインストールしますか？」と表示された場合は、**「設定」→「この提供元のアプリを許可」** を ON にして「インストール」をタップします。
 3. **Google Play プロテクトの確認が表示された場合**:
    - 個人開発の配布用 APK のため、「Play プロテクトによりブロックされました」や「スキャンしますか？」と表示されることがあります。

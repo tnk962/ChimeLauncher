@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -50,6 +51,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,9 +60,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.myenvironment.launcher.core.chime.ChimeEvent
+import com.myenvironment.launcher.core.chime.TimeChimeProvider
+import com.myenvironment.launcher.core.model.LauncherPage
+import com.myenvironment.launcher.ui.indicator.PageIndicatorBar
 import com.myenvironment.launcher.BuildConfig
 import com.myenvironment.launcher.accessibility.NotificationShadeService
 import com.myenvironment.launcher.core.model.BackupSnapshotSummary
@@ -124,6 +131,10 @@ fun SettingsScreen(
     }
 
     var snapshotNameInput by remember { mutableStateOf("") }
+    var firstPreviewId by remember { mutableStateOf(0) }
+    var returnPreviewId by remember { mutableStateOf(0) }
+    var firstPreview by remember { mutableStateOf<ChimeEvent?>(null) }
+    var returnPreview by remember { mutableStateOf<ChimeEvent?>(null) }
 
     // SAF ファイルエクスポート (.json)
     val exportLauncher = rememberLauncherForActivityResult(
@@ -158,13 +169,13 @@ fun SettingsScreen(
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // トップバー
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            // タイトルとHOMEボタンを上段、ビルド情報を下段に配置する。
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     if (!isEmbeddedPage) {
                         IconButton(onClick = onClose) {
                             Icon(
@@ -173,30 +184,33 @@ fun SettingsScreen(
                                 tint = Color.White
                             )
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                     }
-                    Column {
-                        Text(
-                            text = "Chime Launcher 設定",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE} • ${BuildConfig.BUILD_TIMESTAMP})",
-                            color = Color(0xFF9AA0A6),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-
-                if (isEmbeddedPage) {
-                    FilledTonalButton(onClick = onClose) {
-                        Icon(Icons.Default.Home, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("HOMEへ", fontSize = 12.sp)
+                    Text(
+                        text = "Chime Launcher 設定",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontSize = 18.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isEmbeddedPage) {
+                        FilledTonalButton(
+                            onClick = onClose,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Home, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("HOMEへ", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                        }
                     }
                 }
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE} • ${BuildConfig.BUILD_TIMESTAMP})",
+                    color = Color(0xFF9AA0A6),
+                    fontSize = 11.sp
+                )
             }
 
             if (!statusMessage.isNullOrBlank()) {
@@ -320,8 +334,18 @@ fun SettingsScreen(
                     }
                     Switch(
                         checked = settings.firstChimeEnabled,
-                        onCheckedChange = onToggleFirstChime
+                        onCheckedChange = { enabled ->
+                            onToggleFirstChime(enabled)
+                            firstPreviewId++
+                            firstPreview = if (enabled) ChimeEvent.First else null
+                        }
                     )
+                }
+
+                if (firstPreview != null) {
+                    key(firstPreviewId) {
+                        ChimeSettingsPreview(settings, firstPreview) { firstPreview = null }
+                    }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0x22FFFFFF))
@@ -347,7 +371,11 @@ fun SettingsScreen(
                     }
                     Switch(
                         checked = settings.returnChimeEnabled,
-                        onCheckedChange = onToggleReturnChime
+                        onCheckedChange = { enabled ->
+                            onToggleReturnChime(enabled)
+                            returnPreviewId++
+                            returnPreview = if (enabled) ChimeEvent.Return(settings.returnChimeInterval.durationMillis) else null
+                        }
                     )
                 }
 
@@ -369,20 +397,38 @@ fun SettingsScreen(
                             val isSelected = settings.returnChimeInterval == interval
                             if (isSelected) {
                                 FilledTonalButton(
-                                    onClick = { onSelectReturnChimeInterval(interval) },
+                                    onClick = {
+                                        onSelectReturnChimeInterval(interval)
+                                        if (interval != settings.returnChimeInterval) {
+                                            returnPreviewId++
+                                            returnPreview = ChimeEvent.Return(interval.durationMillis)
+                                        }
+                                    },
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text(interval.displayName, fontSize = 11.sp, maxLines = 1)
                                 }
                             } else {
                                 OutlinedButton(
-                                    onClick = { onSelectReturnChimeInterval(interval) },
+                                    onClick = {
+                                        onSelectReturnChimeInterval(interval)
+                                        if (interval != settings.returnChimeInterval) {
+                                            returnPreviewId++
+                                            returnPreview = ChimeEvent.Return(interval.durationMillis)
+                                        }
+                                    },
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text(interval.displayName, fontSize = 11.sp, maxLines = 1)
                                 }
                             }
                         }
+                    }
+                }
+
+                if (returnPreview != null) {
+                    key(returnPreviewId) {
+                        ChimeSettingsPreview(settings, returnPreview) { returnPreview = null }
                     }
                 }
 
@@ -955,6 +1001,28 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun ChimeSettingsPreview(
+    settings: LauncherSettings,
+    event: ChimeEvent?,
+    onFinished: () -> Unit
+) {
+    Text("動きのプレビュー", color = Color(0xFF9AA0A6), fontSize = 11.sp)
+    PageIndicatorBar(
+        pages = listOf(LauncherPage.FIXED_DISCOVER, LauncherPage.FIXED_ALL_APPS, LauncherPage.FIXED_HOME, LauncherPage.FIXED_SETTINGS),
+        visiblePageIndices = setOf(2),
+        indicatorStyle = settings.indicatorStyle,
+        timeSegment = TimeChimeProvider.resolveTimeSegment(java.time.LocalTime.now().hour),
+        timeChimeEnabled = settings.timeChimeEnabled,
+        activeChimeEvent = event,
+        onChimeAnimationFinished = onFinished,
+        isLayoutLocked = true,
+        onSelectPage = {},
+        onLongPressIndicator = {},
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
 private fun AppUpdateControlSection(
     updateState: AppUpdateState,
     onCheckForUpdate: () -> Unit,
@@ -998,15 +1066,15 @@ private fun AppUpdateControlSection(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("最新リリース (${latestRelease.tagName}) のAPKを再インストール")
+                        Text("${latestRelease.tagName} の本体${if (latestRelease.companionDownloadUrl != null) "・Companion" else ""}を再インストール")
                     }
                 }
             }
 
             is AppUpdateState.UpdateAvailable -> {
                 val release = updateState.latestRelease
-                val sizeMb = if (release.apkSizeBytes > 0L) {
-                    String.format("%.1f MB", release.apkSizeBytes / (1024.0 * 1024.0))
+                val sizeMb = if (release.apkSizeBytes + release.companionSizeBytes > 0L) {
+                    String.format("%.1f MB", (release.apkSizeBytes + release.companionSizeBytes) / (1024.0 * 1024.0))
                 } else {
                     "APK"
                 }
@@ -1037,7 +1105,7 @@ private fun AppUpdateControlSection(
                 ) {
                     Icon(Icons.Default.SystemUpdateAlt, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("${release.tagName} をダウンロードしてアップデート ($sizeMb)")
+                    Text("${release.tagName} の本体${if (release.companionDownloadUrl != null) "・Companion" else ""}を更新 ($sizeMb)")
                 }
             }
 
@@ -1049,7 +1117,7 @@ private fun AppUpdateControlSection(
                     "${updateState.downloadedBytes / 1024} KB"
                 }
                 Text(
-                    text = "${release.tagName} のAPKをダウンロード中... ($progressText)",
+                    text = "${release.tagName} のAPK${if (release.companionDownloadUrl != null) "（本体・Companion）" else ""}をダウンロード中... ($progressText)",
                     color = Color(0xFF9AD4EE),
                     fontWeight = FontWeight.Medium,
                     fontSize = 13.sp
@@ -1085,13 +1153,26 @@ private fun AppUpdateControlSection(
                         Text("1. 不明なアプリのインストール許可を開く")
                     }
                 }
+                if (updateState.companionFilePath != null) {
+                    Text(
+                        text = "Companionを先にインストールし、設定画面に戻って本体を更新してください。Androidの確認はそれぞれ必要です。",
+                        color = Color(0xFFBDC1C6),
+                        fontSize = 12.sp
+                    )
+                    OutlinedButton(
+                        onClick = { onInstallDownloadedApk(updateState.companionFilePath) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("1. Companionをインストール")
+                    }
+                }
                 Button(
                     onClick = { onInstallDownloadedApk(updateState.apkFilePath) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.SystemUpdateAlt, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("パッケージインストーラーでアップデートを実行")
+                    Text(if (updateState.companionFilePath != null) "2. 本体をインストール" else "本体をインストール")
                 }
             }
 

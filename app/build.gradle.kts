@@ -14,9 +14,9 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.3.1"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-03 Settings buttons fix\"")
+        versionCode = 18
+        versionName = "1.3.2"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-03 Settings HOME button fix\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
