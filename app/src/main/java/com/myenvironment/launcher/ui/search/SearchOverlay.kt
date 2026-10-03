@@ -1,15 +1,18 @@
 package com.myenvironment.launcher.ui.search
 
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.background
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -61,6 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
 import com.myenvironment.launcher.core.model.AppInfo
 import com.myenvironment.launcher.core.model.ItemType
@@ -118,7 +123,7 @@ fun SearchOverlay(
 
     val isZeroQuery = query.trim().isEmpty()
     val listState = rememberLazyListState()
-    val indexScrollState = rememberScrollState()
+    var indexJumpJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val indexedApps = remember(installedApps) { AppListIndex.sorted(installedApps) }
     LaunchedEffect(listState, keyboardController) {
@@ -253,34 +258,14 @@ fun SearchOverlay(
                             }
                         }
                     }
-                    Column(
-                        modifier = Modifier.width(30.dp).verticalScroll(indexScrollState),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        AppListIndex.labels.forEach { label ->
-                            val target = positions[label]
-                            Text(label, fontSize = 11.sp,
-                                color = if (target != null) MaterialTheme.colorScheme.primary else Color(0xFF626773),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth().height(20.dp)
-                                    .semantics {
-                                        if (target != null) onClick(label = "$label へ移動") {
-                                            keyboardController?.hide()
-                                            scope.launch { listState.scrollToItem(target) }
-                                            true
-                                        }
-                                    }
-                                    .pointerInput(target) {
-                                        detectTapGestures {
-                                            if (target != null) {
-                                                keyboardController?.hide()
-                                                scope.launch { listState.scrollToItem(target) }
-                                            }
-                                        }
-                                    }
-                            )
-                        }
-                    }
+                    CompactAppIndex(
+                        positions = positions,
+                        onSelect = { target ->
+                            indexJumpJob?.cancel()
+                            indexJumpJob = scope.launch { listState.scrollToItem(target) }
+                        },
+                        onFinish = { keyboardController?.hide() }
+                    )
                 }
             } else {
                 // --- 検索文字入力後: 通常のアプリ検索結果を最優先表示 (ゼロクエリ候補と混在させない: 仕様 26, 27) ---
@@ -512,4 +497,81 @@ private fun searchAppDragModifier(app: AppInfo): Modifier {
         key = "search:${app.packageName}:${app.activityName}", origin = DragOrigin.SEARCH,
         createState = { finger -> appDragState(app, DragOrigin.SEARCH, finger, sizePx) }
     )
+}
+
+/** Keep the index clear of edge gestures and let a single finger scrub tiny sections. */
+@Composable
+private fun CompactAppIndex(
+    positions: Map<String, Int>,
+    onSelect: (Int) -> Unit,
+    onFinish: () -> Unit
+) {
+    var selected by remember { mutableStateOf<String?>(null) }
+    val labels = AppListIndex.labels
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.width(44.dp).fillMaxHeight()) {
+        // At full height this covers the former K–Z area. With the IME, keep all
+        // sections visible in the available space; defer hiding it until release.
+        val top = minOf(200.dp, maxHeight * 0.45f)
+        val railHeight = minOf(320.dp, (maxHeight - top - 8.dp).coerceAtLeast(1.dp))
+        val labelSize = (railHeight.value / labels.size * 0.82f / density.fontScale).sp
+        Column(
+            Modifier.offset(y = top).width(28.dp).height(railHeight)
+                .pointerInput(positions, railHeight) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        down.consume()
+                        fun select(y: Float) {
+                            val index = (y / size.height * labels.size).toInt().coerceIn(labels.indices)
+                            val label = labels[index]
+                            if (selected != label) {
+                                selected = label
+                                positions[label]?.let(onSelect)
+                            }
+                        }
+                        select(down.position.y)
+                        try {
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                change.consume()
+                                if (!change.pressed) break
+                                select(change.position.y)
+                            }
+                        } finally {
+                            selected = null
+                            onFinish()
+                        }
+                    }
+                },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            labels.forEach { label ->
+                Box(Modifier.fillMaxWidth().weight(1f).semantics {
+                    positions[label]?.let { target ->
+                        onClick(label = "$label へ移動") {
+                            onSelect(target)
+                            onFinish()
+                            true
+                        }
+                    }
+                }, contentAlignment = Alignment.Center) {
+                    Text(label, fontSize = labelSize, lineHeight = labelSize,
+                        color = if (selected == label || positions[label] != null)
+                            MaterialTheme.colorScheme.primary else Color(0xFF626773),
+                        textAlign = TextAlign.Center, maxLines = 1)
+                }
+            }
+        }
+        selected?.let { label ->
+            val sectionOffset = railHeight * ((labels.indexOf(label) + 0.5f) / labels.size)
+            Box(
+                Modifier.offset(x = (-62).dp, y = top + sectionOffset - 28.dp)
+                    .requiredSize(56.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(28.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(label, color = MaterialTheme.colorScheme.onPrimary, fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
