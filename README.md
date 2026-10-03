@@ -1,33 +1,8 @@
 # Chime Launcher (v1.3.5)
 
-## ドキュメント一覧
+## 現行版の操作マニュアル（v1.3.5）
 
-初期設定・ホームの編集・Google Discoverと独自フィードの表示切替・バックアップ・更新まで、画像付きで説明しています。
-
-### 現行版の操作マニュアル（v1.3.5）
-
-- **[画像付き操作マニュアルを読む](docs/20261004_chimelauncher-user-manual.md)** — GitHub上で本文・画像・目次をそのまま読めます。
-- [操作マニュアルのPDF版](output/pdf/20261004_chimelauncher-user-manual.pdf)
-- [操作マニュアルのMarkdown・画像一式（ZIP）](output/pdf/20261004_chimelauncher-manual-source.zip)
-
-### 仕様・変更履歴・作業ルール
-
-- [仕様書（SPECIFICATION.md）](SPECIFICATION.md)
-- [変更履歴（CHANGELOG.md）](CHANGELOG.md)
-- [開発・レビュー・リリースの作業ルール（AGENTS.md）](AGENTS.md)
-
-### Google Discoverの技術資料
-
-以下はv1.2.0導入当時の資料です。現行版の表示切替・導入手順は、上のv1.3.5操作マニュアルを参照してください。
-
-- [Google Discover Companionの導入・実装・検証範囲](docs/20261001_google-discover-preview.md)
-- [Discoverの画面トークン修正と検証記録](docs/20261001_discover-window-token-fix.md)
-
-### 旧版の操作マニュアル（v1.3.4）
-
-- [v1.3.4の画像付き操作マニュアル](docs/20261003_chimelauncher-user-manual.md)
-- [v1.3.4の操作マニュアルPDF](output/pdf/20261003_chimelauncher-user-manual.pdf)
-- [v1.3.4のMarkdown・画像一式（ZIP）](output/pdf/20261003_chimelauncher-manual-source.zip)
+[画像付き操作マニュアルを読む](docs/20261004_chimelauncher-user-manual.md) — GitHub上で本文・画像・目次をそのまま読めます。
 
 ---
 
@@ -152,3 +127,32 @@ All Appsの「左側半分だけに表示」の切替は廃止し、以前その
 ```
 
 詳細な変更履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
+
+---
+
+## その他のドキュメント
+
+### 現行版のPDF・ダウンロード資料（v1.3.5）
+
+- [操作マニュアルのPDF版](output/pdf/20261004_chimelauncher-user-manual.pdf)
+- [操作マニュアルのMarkdown・画像一式（ZIP）](output/pdf/20261004_chimelauncher-manual-source.zip)
+
+### 仕様・変更履歴・作業ルール
+
+- [仕様書（SPECIFICATION.md）](SPECIFICATION.md)
+- [変更履歴（CHANGELOG.md）](CHANGELOG.md)
+- [開発・レビュー・リリースの作業ルール（AGENTS.md）](AGENTS.md)
+
+### Google Discoverの技術資料
+
+以下はv1.2.0導入当時の資料です。現行版の表示切替・導入手順は、上のv1.3.5操作マニュアルを参照してください。
+
+- [Google Discover Companionの導入・実装・検証範囲](docs/20261001_google-discover-preview.md)
+- [Discoverの画面トークン修正と検証記録](docs/20261001_discover-window-token-fix.md)
+
+### 旧版の操作マニュアル（v1.3.4）
+
+- [v1.3.4の画像付き操作マニュアル](docs/20261003_chimelauncher-user-manual.md)
+- [v1.3.4の操作マニュアルPDF](output/pdf/20261003_chimelauncher-user-manual.pdf)
+- [v1.3.4のMarkdown・画像一式（ZIP）](output/pdf/20261003_chimelauncher-manual-source.zip)
+
