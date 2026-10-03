@@ -1,5 +1,11 @@
 # Chime Launcher (v1.3.5)
 
+## 現行版の操作マニュアル（v1.3.5）
+
+[画像付き操作マニュアルを読む](docs/20261004_chimelauncher-user-manual.md) — GitHub上で本文・画像・目次をそのまま読めます。
+
+---
+
 [正式版v1.3.5](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.5)向けの実装です。本体は **Build 26**、Chime Discover Companionは **Build 9**。ユーザーによるpreview05の実機動作確認が完了し、正式公開を承認済みです。正式版APKの再インストールは未確認です。
 
 v1.3.5ではGoogle Discoverと独自フィードを個別の表示トグルに変更しました。GoogleのみONならHOME→All Apps→Google Discoverの順に移動します。Google Appの自動起動設定を廃止し、設定変更時のスクロール位置を保持。HOMEで戻る操作をしても画面を維持します。
@@ -121,3 +127,31 @@ All Appsの「左側半分だけに表示」の切替は廃止し、以前その
 ```
 
 詳細な変更履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
+
+---
+
+## その他のドキュメント
+
+### 現行版のPDF・ダウンロード資料（v1.3.5）
+
+- [操作マニュアルのPDF版](output/pdf/20261004_chimelauncher-user-manual.pdf)
+- [操作マニュアルのMarkdown・画像一式（ZIP）](output/pdf/20261004_chimelauncher-manual-source.zip)
+
+### 仕様・変更履歴・作業ルール
+
+- [仕様書（SPECIFICATION.md）](SPECIFICATION.md)
+- [変更履歴（CHANGELOG.md）](CHANGELOG.md)
+- [開発・レビュー・リリースの作業ルール（AGENTS.md）](AGENTS.md)
+
+### Google Discoverの技術資料
+
+以下はv1.2.0導入当時の資料です。現行版の表示切替・導入手順は、上のv1.3.5操作マニュアルを参照してください。
+
+- [Google Discover Companionの導入・実装・検証範囲](docs/20261001_google-discover-preview.md)
+- [Discoverの画面トークン修正と検証記録](docs/20261001_discover-window-token-fix.md)
+
+### 旧版の操作マニュアル（v1.3.4）
+
+- [v1.3.4の画像付き操作マニュアル](docs/20261003_chimelauncher-user-manual.md)
+- [v1.3.4の操作マニュアルPDF](output/pdf/20261003_chimelauncher-user-manual.pdf)
+- [v1.3.4のMarkdown・画像一式（ZIP）](output/pdf/20261003_chimelauncher-manual-source.zip)
