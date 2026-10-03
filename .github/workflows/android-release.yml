@@ -92,12 +92,12 @@ jobs:
               if actual_package != package or actual_version != expected:
                   raise SystemExit(f"APK metadata mismatch: {apk}: {actual_package} {actual_version}; expected {package} {expected}")
               signing = subprocess.check_output([str(tools / "apksigner"), "verify", "--print-certs", apk], text=True)
-              # Signer labels vary across apksigner versions (number, SDK range, etc.).
+              # Signer labels vary across apksigner versions (number, SDK range, V2/V3, etc.).
               for line in signing.splitlines():
                   if "certificate SHA-256 digest:" in line:
                       print("apksigner certificate label:", line.split(" certificate SHA-256 digest:", 1)[0])
               apk_certificates = {digest.lower() for digest in re.findall(
-                  r"^[ \t]*Signer[^\r\n]* certificate SHA-256 digest: ([0-9a-fA-F]{64})[ \t\r]*$",
+                  r"^[ \t]*(?:Signer[^\r\n]*|V\d+(?:\.\d+)? Signer:[^\r\n]*) certificate SHA-256 digest: ([0-9a-fA-F]{64})[ \t\r]*$",
                   signing, re.MULTILINE)}
               if len(apk_certificates) != 1:
                   raise SystemExit(f"Expected one signing certificate in apksigner output: {apk}")
