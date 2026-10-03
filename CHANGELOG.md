@@ -8,6 +8,16 @@
 
 ---
 
+## [1.3.1] - 2026-10-03 (Build 17)
+
+- **設定画面のボタン修正**（[Issue #9](https://github.com/tnk962/ChimeLauncher/issues/9)）:
+  - All Apps設定の列数「−／＋」とサイズ「−／＋」をそれぞれ別の行に配置し、Foldを閉じた狭い画面でも操作の組を維持。
+  - 「システム設定 & ツール」からSpotify例のPlaceholder追加ボタンを削除。
+- 本体をv1.3.1 / Build 17、同梱Companionをv1.3.1 / Build 6へ更新。
+- **検証**: ユニットテスト54件成功、本体・CompanionのRelease APKビルド成功。両APKの署名が公開済みv1.3.0の本体と一致。実機での表示は未確認。
+
+---
+
 ## [1.3.0] - 2026-10-02 (Build 16)
 
 ### Added & Changed

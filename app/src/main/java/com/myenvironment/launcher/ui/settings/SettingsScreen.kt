@@ -23,7 +23,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
@@ -587,7 +586,10 @@ fun SettingsScreen(
                     modifier = Modifier.padding(vertical = 6.dp)
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutlinedButton(
                         onClick = {
                             onUpdateTinyIcons(
@@ -608,6 +610,12 @@ fun SettingsScreen(
                             )
                         }
                     ) { Text("列数 +") }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutlinedButton(
                         onClick = {
                             onUpdateTinyIcons(
@@ -883,17 +891,6 @@ fun SettingsScreen(
                     Icon(Icons.Default.SwapHoriz, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("未インストール枠を端末内アプリと一括自動紐付け")
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedButton(
-                    onClick = onAddDemoMissingAppPlaceholder,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.BugReport, contentDescription = null)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("未インストールPlaceholder (Spotify例) をHOMEに追加")
                 }
             }
 
