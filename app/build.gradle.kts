@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.3.3"
+        versionCode = 20
+        versionName = "1.3.4"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-03\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"検索・All Appsからホーム／Dockへドラッグ登録、Dockのドラッグ並べ替え、別の指によるページ送りに対応。長押しメニュー・レイアウトロック・Undoも維持。\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"更新判定を修正し、古い版へのダウンロードを防止。取得直前に最新版を確認し、本体・CompanionのAPKバージョンを照合。ドラッグ登録・Dock並べ替え・別の指でのページ送りも利用できます。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

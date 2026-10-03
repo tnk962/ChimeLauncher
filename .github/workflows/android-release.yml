@@ -20,6 +20,12 @@ jobs:
       HAS_DISTRIBUTION_KEY: ${{ secrets.CHIME_KEYSTORE_BASE64 != '' }}
 
     steps:
+      - name: Require distribution signing key for a tagged release
+        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_DISTRIBUTION_KEY != 'true'
+        run: |
+          echo "::error::A tagged release requires CHIME_KEYSTORE_BASE64; refusing to report an unpublished release as successful."
+          exit 1
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -52,6 +58,35 @@ jobs:
       - name: Run Unit Tests & Assemble Release/Debug APKs
         run: ./gradlew :app:testDebugUnitTest :app:assembleRelease :discover-companion:assembleRelease
 
+      - name: Verify tagged APK versions and shared signing certificate
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          python3 - <<'PY_CHECK'
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          expected = os.environ["GITHUB_REF"].removeprefix("refs/tags/v")
+          tool_dirs = list((Path(os.environ["ANDROID_HOME"]) / "build-tools").iterdir())
+          tools = max((p for p in tool_dirs if (p / "aapt").is_file() and (p / "apksigner").is_file()),
+                      key=lambda p: tuple(int(n) for n in re.findall(r"\d+", p.name)))
+          certificates = []
+          packages = [("app/build/outputs/apk/release/app-release.apk", "com.myenvironment.launcher"),
+                      ("discover-companion/build/outputs/apk/release/discover-companion-release.apk", "com.myenvironment.chimediscoverbridge")]
+          for apk, package in packages:
+              badging = subprocess.check_output([str(tools / "aapt"), "dump", "badging", apk], text=True)
+              actual_package = re.search(r"package: name='([^']+)'", badging).group(1)
+              actual_version = re.search(r"versionName='([^']+)'", badging).group(1)
+              if actual_package != package or actual_version != expected:
+                  raise SystemExit(f"APK metadata mismatch: {apk}: {actual_package} {actual_version}; expected {package} {expected}")
+              signing = subprocess.check_output([str(tools / "apksigner"), "verify", "--print-certs", apk], text=True)
+              certificates.append(re.search(r"Signer #1 certificate SHA-256 digest: ([0-9a-f]+)", signing).group(1))
+              print(f"Verified {apk}: {actual_package} v{actual_version}")
+          if len(set(certificates)) != 1:
+              raise SystemExit("Launcher and Companion signing certificates differ")
+          PY_CHECK
+
       - name: Prepare APK artifacts for distribution
         run: |
           cp app/build/outputs/apk/release/app-release.apk ChimeLauncher-latest.apk
@@ -79,8 +114,25 @@ jobs:
             echo "Release already exists; keeping its verified APKs unchanged."
           else
             EXTRA_ARGS=()
-            if [[ "$TAG_NAME" == *preview* ]]; then EXTRA_ARGS+=(--prerelease); fi
+            if [[ "$TAG_NAME" == *preview* ]]; then
+              EXTRA_ARGS+=(--prerelease --latest=false)
+            else
+              # Do not let an older tag replace an already newer public release.
+              CURRENT_LATEST=$(gh api repos/tnk962/ChimeLauncher/releases/latest --jq .tag_name)
+              CURRENT_LATEST="$CURRENT_LATEST" RELEASE_TAG="$TAG_NAME" python3 - <<'PY_ORDER'
+          import os
+          import re
+          def version(value):
+              match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", value)
+              if not match:
+                  raise SystemExit(f"Unsupported stable release tag: {value}")
+              return tuple(map(int, match.groups()))
+          if version(os.environ["RELEASE_TAG"]) <= version(os.environ["CURRENT_LATEST"]):
+              raise SystemExit("Refusing to replace latest with an equal or older release")
+          PY_ORDER
+              EXTRA_ARGS+=(--latest)
+            fi
             gh release create "${TAG_NAME}" "${APK_RELEASE}" "${APK_COMPANION}" \
               --title "Chime Launcher ${TAG_NAME}" \
-              --generate-notes "${EXTRA_ARGS[@]}"
+              --verify-tag --generate-notes "${EXTRA_ARGS[@]}"
           fi

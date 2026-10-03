@@ -1,6 +1,7 @@
 package com.myenvironment.launcher.core.update
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -17,6 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -59,6 +61,18 @@ sealed interface AppUpdateState {
     data class UpToDate(
         val currentVersion: String,
         val latestRelease: ReleaseUpdateInfo?,
+        val checkedAtText: String
+    ) : AppUpdateState
+
+    data class InstalledAhead(
+        val currentVersion: String,
+        val latestRelease: ReleaseUpdateInfo,
+        val checkedAtText: String
+    ) : AppUpdateState
+
+    data class ReleaseUnavailable(
+        val currentVersion: String,
+        val latestRelease: ReleaseUpdateInfo,
         val checkedAtText: String
     ) : AppUpdateState
 
@@ -107,42 +121,81 @@ object AppUpdateParser {
         isLenient = true
     }
 
-    /**
-     * "v1.2.0" や "1.0.0-beta1" から数値配列 [1, 2, 0] を抽出する
-     */
-    fun parseVersionParts(rawVersion: String): List<Int> {
-        val cleaned = rawVersion
-            .trim()
-            .removePrefix("v")
-            .removePrefix("V")
-            .substringBefore("-")
-            .substringBefore("+")
-            .trim()
-        if (cleaned.isEmpty()) return emptyList()
-        return cleaned.split(".")
-            .mapNotNull { it.trim().toIntOrNull() }
+    private data class Version(val parts: List<Int>, val preview: List<String>)
+    private val versionPattern = Regex("""^[vV]?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$""")
+
+    private fun version(raw: String): Version? {
+        val match = versionPattern.matchEntire(raw.trim()) ?: return null
+        val parts = match.groupValues[1].split(".").map { it.toIntOrNull() ?: return null }
+        val preview = match.groupValues[2].takeIf { it.isNotEmpty() }?.split(".").orEmpty()
+        return Version(parts, preview)
     }
 
-    /**
-     * latestTagName が currentVersionName より新しいバージョンかどうかを判定する
-     */
-    fun isNewerVersion(currentVersionName: String, latestTagName: String): Boolean {
-        val currentParts = parseVersionParts(currentVersionName)
-        val latestParts = parseVersionParts(latestTagName)
-        if (latestParts.isEmpty()) return false
-        if (currentParts.isEmpty()) return true
+    fun parseVersionParts(rawVersion: String): List<Int> = version(rawVersion)?.parts.orEmpty()
 
-        val maxLen = maxOf(currentParts.size, latestParts.size)
-        for (i in 0 until maxLen) {
-            val cur = currentParts.getOrElse(i) { 0 }
-            val lat = latestParts.getOrElse(i) { 0 }
-            if (lat > cur) return true
-            if (lat < cur) return false
+    /** Positive means left is newer; null means either version is invalid. Build metadata is ignored. */
+    fun compareVersions(left: String, right: String): Int? {
+        val a = version(left) ?: return null
+        val b = version(right) ?: return null
+        for (i in 0 until maxOf(a.parts.size, b.parts.size)) {
+            val result = a.parts.getOrElse(i) { 0 }.compareTo(b.parts.getOrElse(i) { 0 })
+            if (result != 0) return result
         }
-        // Stable releases supersede a preview with the same numeric version.
-        val currentIsPreview = currentVersionName.substringBefore("+").contains('-')
-        val latestIsPreview = latestTagName.substringBefore("+").contains('-')
-        return currentIsPreview && !latestIsPreview
+        if (a.preview.isEmpty() && b.preview.isEmpty()) return 0
+        if (a.preview.isEmpty()) return 1
+        if (b.preview.isEmpty()) return -1
+        for (i in 0 until minOf(a.preview.size, b.preview.size)) {
+            val x = a.preview[i]
+            val y = b.preview[i]
+            val xNumeric = x.all { it.isDigit() }
+            val yNumeric = y.all { it.isDigit() }
+            val result = when {
+                xNumeric && yNumeric -> {
+                    val nx = x.trimStart('0').ifEmpty { "0" }
+                    val ny = y.trimStart('0').ifEmpty { "0" }
+                    nx.length.compareTo(ny.length).takeIf { it != 0 } ?: nx.compareTo(ny)
+                }
+                xNumeric -> -1
+                yNumeric -> 1
+                else -> x.compareTo(y)
+            }
+            if (result != 0) return result
+        }
+        return a.preview.size.compareTo(b.preview.size)
+    }
+
+    fun isNewerVersion(currentVersionName: String, latestTagName: String): Boolean =
+        compareVersions(latestTagName, currentVersionName)?.let { it > 0 } == true
+
+    fun canInstallRelease(currentVersion: String, release: ReleaseUpdateInfo): Boolean =
+        !release.apkDownloadUrl.isNullOrBlank() && compareVersions(release.tagName, release.versionName) == 0 &&
+            compareVersions(release.versionName, currentVersion)?.let { it >= 0 } == true
+
+    fun canInstallApk(installedVersion: String?, installedCode: Long?, apkVersion: String?, apkCode: Long): Boolean {
+        if (apkVersion == null || version(apkVersion) == null || apkCode < 0) return false
+        if (installedCode != null && apkCode < installedCode) return false
+        if (installedVersion == null) return true
+        return compareVersions(apkVersion, installedVersion)?.let { it >= 0 } == true
+    }
+
+    fun stateForRelease(currentVersion: String, release: ReleaseUpdateInfo, checkedAt: String): AppUpdateState {
+        if (compareVersions(release.tagName, release.versionName) != 0) {
+            return AppUpdateState.Error("リリースタグとバージョン情報が一致しません", release.htmlUrl)
+        }
+        val order = compareVersions(release.versionName, currentVersion)
+            ?: return AppUpdateState.Error("バージョン情報を認識できません", release.htmlUrl)
+        return when {
+            order < 0 -> AppUpdateState.InstalledAhead(currentVersion, release, checkedAt)
+            order == 0 -> AppUpdateState.UpToDate(currentVersion, release, checkedAt)
+            release.apkDownloadUrl.isNullOrBlank() -> AppUpdateState.ReleaseUnavailable(currentVersion, release, checkedAt)
+            else -> AppUpdateState.UpdateAvailable(currentVersion, release, checkedAt)
+        }
+    }
+
+    private fun matchesVersionedApk(name: String, prefix: String, releaseVersion: String): Boolean {
+        if (!name.startsWith(prefix, ignoreCase = true) || !name.endsWith(".apk", ignoreCase = true)) return false
+        val assetVersion = name.substring(prefix.length).dropLast(4).removeSuffix("-debug")
+        return compareVersions(assetVersion, releaseVersion) == 0
     }
 
     /**
@@ -152,7 +205,8 @@ object AppUpdateParser {
         return runCatching {
             val root = json.parseToJsonElement(rawJson).jsonObject
             val tagName = root["tag_name"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
-            if (tagName.isEmpty()) return null
+            if (version(tagName) == null || root["draft"]?.jsonPrimitive?.booleanOrNull == true ||
+                root["prerelease"]?.jsonPrimitive?.booleanOrNull == true) return null
 
             val versionName = tagName.removePrefix("v").removePrefix("V")
             val title = root["name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
@@ -168,9 +222,8 @@ object AppUpdateParser {
             // Never install the separate Companion as an update to the launcher.
             val launcherAssets = assetObjects.filter { obj ->
                 val name = obj["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                name.startsWith("ChimeLauncher-", ignoreCase = true) &&
-                    name.endsWith(".apk", ignoreCase = true) &&
-                    !name.contains("companion", ignoreCase = true)
+                matchesVersionedApk(name, "ChimeLauncher-", versionName) &&
+                    !obj["browser_download_url"]?.jsonPrimitive?.contentOrNull.isNullOrBlank()
             }
             val preferredAsset = launcherAssets.firstOrNull { obj ->
                 val name = obj["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -179,9 +232,9 @@ object AppUpdateParser {
 
             val companionAsset = assetObjects.filter { obj ->
                 val name = obj["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                (name.startsWith("GoogleDiscoverCompanion-", ignoreCase = true) ||
-                    name.startsWith("ChimeDiscoverCompanion-", ignoreCase = true)) &&
-                    name.endsWith(".apk", ignoreCase = true)
+                (matchesVersionedApk(name, "GoogleDiscoverCompanion-", versionName) ||
+                    matchesVersionedApk(name, "ChimeDiscoverCompanion-", versionName)) &&
+                    !obj["browser_download_url"]?.jsonPrimitive?.contentOrNull.isNullOrBlank()
             }.let { candidates ->
                 candidates.firstOrNull {
                     !it["name"]?.jsonPrimitive?.contentOrNull.orEmpty().contains("debug", ignoreCase = true)
@@ -217,6 +270,7 @@ class AppUpdateManager(
     private val context: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val operationLock = Any()
 
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
     val updateState: StateFlow<AppUpdateState> = _updateState.asStateFlow()
@@ -243,38 +297,23 @@ class AppUpdateManager(
      * GitHub Releases の最新バージョンを確認する
      */
     fun checkForUpdates(manual: Boolean = true) {
-        val currentState = _updateState.value
-        if (currentState is AppUpdateState.Downloading) return
-
-        _updateState.value = AppUpdateState.Checking
+        synchronized(operationLock) {
+            val current = _updateState.value
+            if (current is AppUpdateState.Downloading || current is AppUpdateState.Checking ||
+                (!manual && current is AppUpdateState.ReadyToInstall)) return
+            _updateState.value = AppUpdateState.Checking
+        }
         scope.launch {
-            val result = fetchLatestReleaseFromGitHub()
-            val checkedTime = SimpleDateFormat("HH:mm", Locale.JAPAN).format(Date())
-            lastCheckedAtMillis = System.currentTimeMillis()
-
-            result.fold(
+            fetchLatestReleaseFromGitHub().fold(
                 onSuccess = { release ->
-                    val currentVer = BuildConfig.VERSION_NAME
-                    if (AppUpdateParser.isNewerVersion(currentVer, release.tagName)) {
-                        _updateState.value = AppUpdateState.UpdateAvailable(
-                            currentVersion = currentVer,
-                            latestRelease = release,
-                            checkedAtText = checkedTime
-                        )
-                    } else {
-                        _updateState.value = AppUpdateState.UpToDate(
-                            currentVersion = currentVer,
-                            latestRelease = release,
-                            checkedAtText = checkedTime
-                        )
-                    }
+                    lastCheckedAtMillis = System.currentTimeMillis()
+                    val time = SimpleDateFormat("HH:mm", Locale.JAPAN).format(Date())
+                    _updateState.value = AppUpdateParser.stateForRelease(BuildConfig.VERSION_NAME, release, time)
                 },
                 onFailure = { err ->
-                    if (manual || _updateState.value is AppUpdateState.Checking) {
-                        _updateState.value = AppUpdateState.Error(
-                            message = "アップデート確認に失敗しました: ${err.localizedMessage ?: "通信エラー"}"
-                        )
-                    }
+                    _updateState.value = AppUpdateState.Error(
+                        "アップデート確認に失敗しました: ${err.localizedMessage ?: "通信エラー"}"
+                    )
                 }
             )
         }
@@ -283,22 +322,28 @@ class AppUpdateManager(
     /**
      * 最新リリースのAPKをキャッシュディレクトリへダウンロードし、完了後にインストーラーを起動する
      */
-    fun downloadAndInstallRelease(release: ReleaseUpdateInfo) {
-        val downloadUrl = release.apkDownloadUrl
-        if (downloadUrl.isNullOrBlank()) {
-            openUrlInBrowser(release.htmlUrl)
-            return
+    fun downloadAndInstallRelease(requestedRelease: ReleaseUpdateInfo) {
+        synchronized(operationLock) {
+            if (_updateState.value is AppUpdateState.Downloading || _updateState.value is AppUpdateState.Checking) return
+            _updateState.value = AppUpdateState.Checking
         }
-
-        if (_updateState.value is AppUpdateState.Downloading) return
-
-        _updateState.value = AppUpdateState.Downloading(release, 0, 0L, release.apkSizeBytes + release.companionSizeBytes)
         scope.launch {
+            var selectedRelease = requestedRelease
             runCatching {
+                // A button may hold old metadata. Always resolve the actual latest release before downloading.
+                val release = fetchLatestReleaseFromGitHub().getOrThrow()
+                selectedRelease = release
+                lastCheckedAtMillis = System.currentTimeMillis()
+                if (!AppUpdateParser.canInstallRelease(BuildConfig.VERSION_NAME, release)) {
+                    val time = SimpleDateFormat("HH:mm", Locale.JAPAN).format(Date())
+                    _updateState.value = AppUpdateParser.stateForRelease(BuildConfig.VERSION_NAME, release, time)
+                    return@launch
+                }
+                _updateState.value = AppUpdateState.Downloading(release, 0, 0L, release.apkSizeBytes + release.companionSizeBytes)
                 val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
                 val totalBytes = release.apkSizeBytes + release.companionSizeBytes
                 var completedBytes = 0L
-                fun download(url: String, name: String, expectedBytes: Long, packageName: String): File {
+                fun download(url: String, name: String, expectedBytes: Long, packageName: String, optional: Boolean = false): File? {
                     val target = File(updatesDir, name)
                     val temporary = File(updatesDir, "pending-$name")
                     try {
@@ -307,48 +352,54 @@ class AppUpdateManager(
                             _updateState.value = AppUpdateState.Downloading(
                                 release,
                                 if (totalBytes > 0) ((progress * 100) / totalBytes).toInt().coerceIn(0, 100) else -1,
-                                progress,
-                                totalBytes
+                                progress, totalBytes
                             )
                         }
                         check(temporary.length() > 0L) { "APKが空です" }
                         check(expectedBytes <= 0L || temporary.length() == expectedBytes) { "APKのサイズが一致しません" }
-                        val packageInfo = context.packageManager.getPackageArchiveInfo(temporary.absolutePath, 0)
-                        check(packageInfo?.packageName == packageName) { "APKのパッケージが一致しません" }
-                        check(packageInfo?.versionName == release.versionName) { "APKのバージョンが一致しません" }
+                        val installable = validateUpdateApk(temporary, packageName, release.versionName)
+                        completedBytes += temporary.length()
+                        // An independently newer Companion must not prevent a launcher update.
+                        if (optional && !installable) return null
+                        check(installable) { "インストール済みより古いAPKはインストールできません" }
                         check(!target.exists() || target.delete()) { "保存済みAPKを更新できません" }
                         check(temporary.renameTo(target)) { "APKを保存できません" }
-                        completedBytes += target.length()
                         return target
-                    } finally {
-                        temporary.delete()
-                    }
+                    } finally { temporary.delete() }
                 }
                 val companion = release.companionDownloadUrl?.takeIf { it.isNotBlank() }?.let {
-                    download(it, "GoogleDiscoverCompanion-${release.tagName}.apk", release.companionSizeBytes, "com.myenvironment.chimediscoverbridge")
+                    download(it, "GoogleDiscoverCompanion-${release.tagName}.apk", release.companionSizeBytes,
+                        "com.myenvironment.chimediscoverbridge", optional = true)
                 }
-                val launcher = download(downloadUrl, "ChimeLauncher-${release.tagName}.apk", release.apkSizeBytes, context.packageName)
+                val launcher = checkNotNull(download(release.apkDownloadUrl!!, "ChimeLauncher-${release.tagName}.apk",
+                    release.apkSizeBytes, context.packageName))
                 launcher to companion
             }.fold(
                 onSuccess = { (launcher, companion) ->
                     _updateState.value = AppUpdateState.ReadyToInstall(
-                        latestRelease = release,
-                        apkFilePath = launcher.absolutePath,
-                        requiresInstallPermission = !canRequestPackageInstalls(),
-                        companionFilePath = companion?.absolutePath
+                        selectedRelease, launcher.absolutePath, !canRequestPackageInstalls(), companion?.absolutePath
                     )
-                    withContext(Dispatchers.Main) {
-                        triggerPackageInstaller(companion ?: launcher)
-                    }
+                    withContext(Dispatchers.Main) { triggerPackageInstaller(companion ?: launcher) }
                 },
                 onFailure = { err ->
                     _updateState.value = AppUpdateState.Error(
-                        message = "APKのダウンロードに失敗しました: ${err.localizedMessage ?: "通信エラー"}",
-                        fallbackUrl = release.htmlUrl
+                        "APKの取得に失敗しました: ${err.localizedMessage ?: "通信エラー"}", selectedRelease.htmlUrl
                     )
                 }
             )
         }
+    }
+
+    /** Validate both tag metadata and the actually installed build, including same-version downgrades. */
+    private fun validateUpdateApk(file: File, packageName: String, versionName: String): Boolean {
+        val archive = context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+        check(archive?.packageName == packageName) { "APKのパッケージが一致しません" }
+        check(archive?.versionName == versionName) { "APKのバージョンが一致しません" }
+        val installed = try {
+            context.packageManager.getPackageInfo(packageName, 0)
+        } catch (_: PackageManager.NameNotFoundException) { null }
+        return AppUpdateParser.canInstallApk(installed?.versionName, installed?.longVersionCode,
+            archive?.versionName, archive?.longVersionCode ?: -1L)
     }
 
     /**
@@ -356,8 +407,21 @@ class AppUpdateManager(
      * 「不明なアプリのインストール」権限が未許可の場合は設定画面へ誘導する。
      */
     fun triggerPackageInstaller(apkFile: File) {
-        if (!apkFile.exists()) {
-            _updateState.value = AppUpdateState.Error("ダウンロード済みのAPKファイルが見つかりません。再度ダウンロードしてください。")
+        val ready = _updateState.value as? AppUpdateState.ReadyToInstall ?: return
+        val validation = runCatching {
+            check(apkFile.exists()) { "ダウンロード済みAPKが見つかりません。再度ダウンロードしてください" }
+            val path = apkFile.absolutePath
+            val packageName = when (path) {
+                ready.apkFilePath -> context.packageName
+                ready.companionFilePath -> "com.myenvironment.chimediscoverbridge"
+                else -> error("確認済みAPK以外はインストールできません")
+            }
+            check(validateUpdateApk(apkFile, packageName, ready.latestRelease.versionName)) {
+                "インストール済みより古いAPKはインストールできません"
+            }
+        }
+        if (validation.isFailure) {
+            _updateState.value = AppUpdateState.Error(validation.exceptionOrNull()?.message ?: "APKの検証に失敗しました")
             return
         }
 
@@ -425,6 +489,8 @@ class AppUpdateManager(
         return runCatching {
             val connection = (URL(AppUpdateState.GITHUB_LATEST_RELEASE_API).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
+                useCaches = false
+                setRequestProperty("Cache-Control", "no-cache")
                 connectTimeout = 10_000
                 readTimeout = 10_000
                 setRequestProperty("Accept", "application/vnd.github+json")

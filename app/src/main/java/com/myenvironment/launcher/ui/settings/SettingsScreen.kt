@@ -76,6 +76,7 @@ import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
 import com.myenvironment.launcher.core.model.IndicatorStyle
 import com.myenvironment.launcher.core.model.LauncherSettings
 import com.myenvironment.launcher.core.model.ReturnChimeInterval
+import com.myenvironment.launcher.core.update.AppUpdateParser
 import com.myenvironment.launcher.core.update.AppUpdateState
 import com.myenvironment.launcher.core.update.ReleaseUpdateInfo
 
@@ -1065,7 +1066,9 @@ private fun AppUpdateControlSection(
                     fontSize = 13.sp
                 )
                 val latestRelease = updateState.latestRelease
-                if (latestRelease?.apkDownloadUrl != null && showCheckButton) {
+                if (latestRelease != null && showCheckButton &&
+                    AppUpdateParser.canInstallRelease(updateState.currentVersion, latestRelease) &&
+                    AppUpdateParser.compareVersions(latestRelease.versionName, updateState.currentVersion) == 0) {
                     OutlinedButton(
                         onClick = { onDownloadAndInstallUpdate(latestRelease) },
                         modifier = Modifier.fillMaxWidth()
@@ -1075,6 +1078,24 @@ private fun AppUpdateControlSection(
                         Text("${latestRelease.tagName} の本体${if (latestRelease.companionDownloadUrl != null) "・Companion" else ""}を再インストール")
                     }
                 }
+            }
+
+            is AppUpdateState.InstalledAhead -> {
+                Text(
+                    text = "インストール済みの v${updateState.currentVersion} は、公開版 ${updateState.latestRelease.tagName} より新しいバージョンです。",
+                    color = Color(0xFF81C995), fontWeight = FontWeight.Medium, fontSize = 13.sp
+                )
+                Text(
+                    text = "古い公開版へのインストールは行いません。（確認: ${updateState.checkedAtText}）",
+                    color = Color(0xFFBDC1C6), fontSize = 12.sp
+                )
+            }
+
+            is AppUpdateState.ReleaseUnavailable -> {
+                Text(
+                    text = "公開版 ${updateState.latestRelease.tagName} のAPKは準備中です（現在: v${updateState.currentVersion}）。時間をおいて再確認してください。",
+                    color = Color(0xFFFDD663), fontSize = 13.sp
+                )
             }
 
             is AppUpdateState.UpdateAvailable -> {
