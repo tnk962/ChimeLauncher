@@ -11,6 +11,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,6 +73,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -83,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.myenvironment.launcher.MainActivity
+import com.myenvironment.launcher.core.feed.overlay.OverlayDragSession
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
 import com.myenvironment.launcher.core.model.GridPosition
@@ -236,7 +243,7 @@ fun LauncherScreen(
     val googleOverlay = LocalGoogleOverlayClient.current
     val overlayState = googleOverlay?.state?.collectAsStateWithLifecycle()?.value
     LaunchedEffect(uiState.settings.discoverMode, googleOverlay) {
-        googleOverlay?.setEnabled(uiState.settings.discoverMode == DiscoverMode.NATIVE_BRIDGE)
+        googleOverlay?.setEnabled(uiState.settings.discoverMode.usesGoogleOverlay)
     }
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -290,6 +297,7 @@ fun LauncherScreen(
     }
 
     val adaptiveSpec = rememberAdaptiveLayoutSpec(uiState.settings)
+    val embeddedSettingsScrollState = rememberScrollState()
     val pages = uiState.pages
     val editableHomePages = remember(pages) { pages.filter { it.isEditableHomePage() } }
     val homePageIndex = uiState.homePageIndex
@@ -596,7 +604,7 @@ fun LauncherScreen(
         }
     }
 
-    // DiscoverMode が GOOGLE_APP の場合、左端のDiscoverページへ到達したタイミングでGoogleアプリを起動する (仕様 29)
+    // Overlayの起点になる左端ページを確認する。
     val leftmostActivePageId = if (isDualPageMode) {
         val slot = dualSlots.getOrNull(dualPagerState.settledPage)
         when (slot) {
@@ -607,18 +615,6 @@ fun LauncherScreen(
     } else {
         pages.getOrNull(singlePagerState.settledPage)?.id
     }
-    var lastLeftmostPageId by remember { mutableStateOf(LauncherPage.PAGE_ID_HOME) }
-    LaunchedEffect(leftmostActivePageId, uiState.settings.discoverMode) {
-        val currentId = leftmostActivePageId ?: return@LaunchedEffect
-        if (currentId == LauncherPage.PAGE_ID_DISCOVER &&
-            lastLeftmostPageId != LauncherPage.PAGE_ID_DISCOVER &&
-            uiState.settings.discoverMode == DiscoverMode.GOOGLE_APP
-        ) {
-            viewModel.feedBridge.openGoogleDiscoverApp()
-        }
-        lastLeftmostPageId = currentId
-    }
-
     // 現在編集や追加のターゲットとなるメインページ
     val currentPage = if (isDualPageMode) {
         val currentSlot = dualSlots.getOrNull(dualPagerState.currentPage.coerceIn(0, dualSlots.lastIndex))
@@ -643,14 +639,42 @@ fun LauncherScreen(
             pages.getOrNull(singlePagerState.settledPage)?.id == LauncherPage.PAGE_ID_DISCOVER
     }
 
-    // Backボタン押下時：オーバーレイや編集モードを閉じ、HOME以外のページにいる場合はHOMEへ戻す (仕様 4)
-    val shouldInterceptBack = activeDragState != null || (overlayState?.progress ?: 0f) > 0f || uiState.overlay.isSearchOverlayOpen ||
-        uiState.overlay.isSettingsOpen ||
-        uiState.overlay.resizingWidgetTarget != null ||
-        uiState.overlay.isEditMode ||
-        currentPage.id != LauncherPage.PAGE_ID_HOME
+    // Google-only mode has no launcher Discover page: reveal directly from the All Apps edge.
+    val canRevealGoogleFromAllApps = uiState.settings.discoverMode == DiscoverMode.GOOGLE_ONLY &&
+        activeDragState == null && !uiState.overlay.isEditMode &&
+        leftmostActivePageId == LauncherPage.PAGE_ID_ALL_APPS &&
+        !(if (isDualPageMode) dualPagerState.isScrollInProgress else singlePagerState.isScrollInProgress)
+    val googleOnlyEdgeModifier = Modifier.pointerInput(canRevealGoogleFromAllApps, googleOverlay) {
+        if (!canRevealGoogleFromAllApps) return@pointerInput
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val drag = OverlayDragSession(viewConfiguration.touchSlop,
+                googleOverlay?.revealWidth ?: size.width.toFloat())
+            var overlayDragging = false
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed || event.changes.any { it.id != down.id && it.pressed }) break
+                    val progress = drag.move(
+                        change.position.x - change.previousPosition.x,
+                        change.position.y - change.previousPosition.y
+                    ) { googleOverlay?.beginScroll() == true }
+                    if (progress != null) {
+                        overlayDragging = true
+                        change.consume()
+                        googleOverlay?.scroll(progress)
+                    }
+                }
+            } finally {
+                if (overlayDragging) googleOverlay?.endScroll()
+            }
+        }
+    }
 
-    BackHandler(enabled = shouldInterceptBack) {
+    // Always consume Back: dismiss active UI, return other pages to HOME, and do nothing on HOME.
+    // Let dialogs keep their own dismissal handlers instead of finishing the launcher Activity.
+    BackHandler {
         when {
             activeDragState != null -> activeDragState = null
             (overlayState?.progress ?: 0f) > 0f -> googleOverlay?.close()
@@ -764,7 +788,7 @@ fun LauncherScreen(
             )
     ) {
         val mainArea: @Composable (Modifier) -> Unit = { areaModifier ->
-            Column(modifier = areaModifier) {
+            Column(modifier = areaModifier.then(googleOnlyEdgeModifier)) {
                 EditModeBanner(
                     visible = uiState.overlay.isEditMode,
                     currentPage = currentPage,
@@ -783,6 +807,7 @@ fun LauncherScreen(
                     // 左右2ページ見開きモード（Discover・All Apps・設定は1ページ全画面固定、他は左右2ページ見開き）
                     HorizontalPager(
                         state = dualPagerState,
+                        key = { index -> dualSlots[index].visiblePageIds.sorted().joinToString("|") },
                         beyondViewportPageCount = dualSlots.size.coerceAtLeast(1),
                         userScrollEnabled = activeDragState == null,
                         modifier = Modifier
@@ -803,6 +828,7 @@ fun LauncherScreen(
                                     adaptiveSpec = adaptiveSpec,
                                     isHalfPaneInDualMode = false,
                                     isSettledOnDiscover = isSettledOnDiscover,
+                                    settingsScrollState = embeddedSettingsScrollState,
                                     activeDragState = activeDragState,
                                     highlightedDropCell = if (currentDropTarget?.first == slot.page.id) currentDropTarget.third else null,
                                     editableHomePages = editableHomePages,
@@ -824,6 +850,7 @@ fun LauncherScreen(
                                             adaptiveSpec = adaptiveSpec,
                                             isHalfPaneInDualMode = true,
                                             isSettledOnDiscover = isSettledOnDiscover,
+                                            settingsScrollState = embeddedSettingsScrollState,
                                             activeDragState = activeDragState,
                                             highlightedDropCell = if (currentDropTarget?.first == slot.leftPage.id) currentDropTarget.third else null,
                                             editableHomePages = editableHomePages,
@@ -851,6 +878,7 @@ fun LauncherScreen(
                                             adaptiveSpec = adaptiveSpec,
                                             isHalfPaneInDualMode = true,
                                             isSettledOnDiscover = isSettledOnDiscover,
+                                            settingsScrollState = embeddedSettingsScrollState,
                                             activeDragState = activeDragState,
                                             highlightedDropCell = if (currentDropTarget?.first == slot.rightPage.id) currentDropTarget.third else null,
                                             editableHomePages = editableHomePages,
@@ -866,6 +894,7 @@ fun LauncherScreen(
                     // Expanded 1ページ全画面表示モード
                     HorizontalPager(
                         state = singlePagerState,
+                        key = { index -> pages[index].id },
                         beyondViewportPageCount = pages.size.coerceAtLeast(1),
                         userScrollEnabled = activeDragState == null,
                         modifier = Modifier
@@ -882,6 +911,7 @@ fun LauncherScreen(
                             adaptiveSpec = adaptiveSpec,
                             isHalfPaneInDualMode = false,
                             isSettledOnDiscover = isSettledOnDiscover,
+                            settingsScrollState = embeddedSettingsScrollState,
                             activeDragState = activeDragState,
                             highlightedDropCell = if (currentDropTarget?.first == page.id) currentDropTarget.third else null,
                             editableHomePages = editableHomePages,
@@ -1340,6 +1370,7 @@ private fun LauncherPageContent(
     adaptiveSpec: AdaptiveLayoutSpec,
     isHalfPaneInDualMode: Boolean,
     isSettledOnDiscover: Boolean,
+    settingsScrollState: ScrollState,
     activeDragState: CrossPageDragState?,
     highlightedDropCell: GridPosition?,
     editableHomePages: List<LauncherPage>,
@@ -1436,6 +1467,7 @@ private fun LauncherPageContent(
                 snapshots = uiState.snapshots,
                 statusMessage = uiState.overlay.statusMessage,
                 isEmbeddedPage = true,
+                scrollState = settingsScrollState,
                 hasUsageAccessPermission = uiState.hasUsageAccessPermission,
                 updateState = uiState.updateState,
                 onClearStatusMessage = { viewModel.clearStatusMessage() },

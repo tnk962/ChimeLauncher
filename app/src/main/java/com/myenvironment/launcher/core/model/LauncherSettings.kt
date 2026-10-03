@@ -11,6 +11,14 @@ enum class DiscoverMode(val displayName: String, val description: String) {
         displayName = "独自フィード + Google Discover (推奨)",
         description = "独自フィードのさらに左にGoogle Discoverを表示します。Chime Discover Companionが必要です"
     ),
+    FEED_ONLY(
+        displayName = "独自フィードのみ",
+        description = "独自フィードだけを表示します。Google Discoverへの接続やGoogleアプリの自動起動は行いません"
+    ),
+    GOOGLE_ONLY(
+        displayName = "Google Discoverのみ",
+        description = "HOMEからAll Apps、その先へのスワイプでGoogle Discoverを表示します。Chime Discover Companionが必要です"
+    ),
     GOOGLE_APP(
         displayName = "Google Appを自動で開く",
         description = "左端ページへスワイプしたタイミングでGoogleアプリを起動します"
@@ -18,7 +26,21 @@ enum class DiscoverMode(val displayName: String, val description: String) {
     DISABLED(
         displayName = "無効",
         description = "Google Discoverページを非表示にし、All Appsを最左ページにします"
-    )
+    );
+
+    val usesGoogleOverlay: Boolean get() = this == NATIVE_BRIDGE || this == GOOGLE_ONLY
+    val showsCustomFeed: Boolean get() = this == NATIVE_BRIDGE || this == FEED_ONLY || this == GOOGLE_APP
+    // Retain the legacy enum name so old JSON backups can still be decoded.
+    val normalized: DiscoverMode get() = if (this == GOOGLE_APP) FEED_ONLY else this
+
+    companion object {
+        fun fromVisibility(google: Boolean, feed: Boolean): DiscoverMode = when {
+            google && feed -> NATIVE_BRIDGE
+            google -> GOOGLE_ONLY
+            feed -> FEED_ONLY
+            else -> DISABLED
+        }
+    }
 }
 
 /**

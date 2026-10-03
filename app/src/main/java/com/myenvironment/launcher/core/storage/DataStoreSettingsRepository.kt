@@ -63,7 +63,7 @@ class DataStoreSettingsRepository(
         val modeStr = prefs[Keys.DISCOVER_MODE]
         val discoverMode = modeStr?.let {
             runCatching { DiscoverMode.valueOf(it) }.getOrNull()
-        } ?: default.discoverMode
+        }?.normalized ?: default.discoverMode
 
         val expandedModeStr = prefs[Keys.EXPANDED_LAYOUT_MODE]
         val expandedLayoutMode = expandedModeStr?.let {
@@ -174,7 +174,7 @@ class DataStoreSettingsRepository(
 
     override suspend fun setDiscoverMode(mode: DiscoverMode) {
         appContext.launcherDataStore.edit { prefs ->
-            prefs[Keys.DISCOVER_MODE] = mode.name
+            prefs[Keys.DISCOVER_MODE] = mode.normalized.name
         }
     }
 
@@ -252,7 +252,7 @@ class DataStoreSettingsRepository(
             prefs[Keys.TINY_SIZE_DP] = newSettings.tinyIconsSizeDp
             prefs[Keys.TINY_SHOW_LABELS] = newSettings.tinyIconsShowLabels
             prefs[Keys.SWIPE_DOWN_NOTIFICATION] = newSettings.swipeDownNotificationEnabled
-            prefs[Keys.DISCOVER_MODE] = newSettings.discoverMode.name
+            prefs[Keys.DISCOVER_MODE] = newSettings.discoverMode.normalized.name
             prefs[Keys.EXPANDED_LAYOUT_MODE] = newSettings.expandedPageLayoutMode.name
             prefs[Keys.ALL_APPS_LEFT_ONLY_EXPANDED] = newSettings.allAppsLeftOnlyInExpandedSingle
             prefs[Keys.INDICATOR_STYLE] = newSettings.indicatorStyle.name

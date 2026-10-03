@@ -8,6 +8,18 @@
 
 ---
 
+## [1.3.5] - 2026-10-04 (本体Build 26・Companion Build 9)
+
+- Refs #12: Google Discoverと独自フィードを独立した2つの表示トグルに変更。設定画面・独自フィードの設定ダイアログで共通の4組合せを選択可能。
+- 両方ON: HOME→All Apps→独自フィード→Google Discover。GoogleのみON: HOME→All Apps→Google Discover。独自フィードのみON: HOME→All Apps→独自フィード。両方OFF: HOME→All Apps。
+- Google Appの自動起動設定と自動起動処理を廃止。旧GOOGLE_APP設定・バックアップは独自フィードのみへ移行。旧JSONを読めるよう内部の旧enum値は保持。
+- Discoverページの追加・除外時もページIDでPagerを維持し、設定スクロール状態をPager外で保持。preview03の挙動改善はユーザー実機確認済み。
+- HOMEで戻る操作を常に受け止め、何も開いていない場合は何もしない。検索・編集・overlayを閉じる動作と他ページからHOMEへ戻る動作を維持。
+- 本体をv1.3.5 / Build 26、Companionをv1.3.5 / Build 9へ更新。Companionはバージョン情報のみ変更。
+- 検証: preview05: ユニットテスト99件成功（4組合せ・独立トグル・旧設定移行の2件追加）、Debug APKビルド成功。APK内部バージョン・署名と、設定上下が参照する生成BuildConfigの更新情報を確認。adbの既存eventsログでMainActivityの終了・再生成を同一プロセス内で確認（戻る操作との時刻照合は未実施）。ユーザーからpreview05の実機確認OK・リリース指示を受領。旧GOOGLE_APPバックアップの実機移行と将来版へのアプリ内更新は未確認。正式版の本体・Companion Releaseビルドとユニットテスト99件成功。両APKの内部バージョンv1.3.5・Build 26/9と公開済みv1.3.4との署名一致を確認。GitHub署名Secret未設定のため、マージコミットから再ビルドした署名検証済みAPKを直接公開する。公開状態・添付APKの照合はReleaseに記録する。
+
+---
+
 ## [1.3.4] - 2026-10-03 (本体Build 20・Companion Build 8)
 
 - 更新判定を新しい版・同じ版・公開版より新しいインストール済み版・APK準備中に分け、古い公開版への再インストールボタンを非表示に。

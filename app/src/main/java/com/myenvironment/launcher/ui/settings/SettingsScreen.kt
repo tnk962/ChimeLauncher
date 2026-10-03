@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -124,6 +125,7 @@ fun SettingsScreen(
     onInstallDownloadedApk: (String) -> Unit = {},
     onOpenUnknownSourcesSettings: () -> Unit = {},
     onOpenGitHubReleases: (String) -> Unit = {},
+    scrollState: ScrollState = rememberScrollState(),
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
@@ -166,7 +168,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -731,26 +733,30 @@ fun SettingsScreen(
                 }
             }
 
-            // 5. Discover Mode 設定 (仕様 29)
-            SettingsSectionCard(title = "Discover Mode") {
-                DiscoverMode.entries.forEach { mode ->
+            // 5. Independent feed visibility toggles
+            SettingsSectionCard(title = "フィード表示") {
+                listOf("Google Discover" to true, "独自フィード" to false).forEach { (label, isGoogle) ->
+                    val checked = if (isGoogle) settings.discoverMode.usesGoogleOverlay else settings.discoverMode.showsCustomFeed
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelectDiscoverMode(mode) }
-                            .padding(vertical = 4.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
-                        RadioButton(
-                            selected = settings.discoverMode == mode,
-                            onClick = { onSelectDiscoverMode(mode) }
-                        )
-                        Column(modifier = Modifier.padding(start = 6.dp)) {
-                            Text(text = mode.displayName, color = Color.White, fontSize = 14.sp)
-                            Text(text = mode.description, color = Color(0xFF9AA0A6), fontSize = 11.sp)
-                        }
+                        Text(label, color = Color.White, modifier = Modifier.weight(1f))
+                        Switch(checked = checked, onCheckedChange = { enabled ->
+                            onSelectDiscoverMode(DiscoverMode.fromVisibility(
+                                google = if (isGoogle) enabled else settings.discoverMode.usesGoogleOverlay,
+                                feed = if (isGoogle) settings.discoverMode.showsCustomFeed else enabled
+                            ))
+                        })
                     }
                 }
+                Text("Google DiscoverにはChime Discover Companionが必要です。", fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("左へ移動する順序: HOME → All Apps" +
+                    (if (settings.discoverMode.showsCustomFeed) " → 独自フィード" else "") +
+                    (if (settings.discoverMode.usesGoogleOverlay) " → Google Discover" else ""),
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             // 6. Backup & Restore (仕様 22, 23)
