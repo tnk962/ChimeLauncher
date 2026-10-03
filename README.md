@@ -1,5 +1,15 @@
 # Chime Launcher (v1.3.5)
 
+## 操作マニュアル
+
+初期設定・ホームの編集・Google Discoverと独自フィードの表示切替・バックアップ・更新まで、画像付きで説明しています。
+
+- **[画像付き操作マニュアルを読む（v1.3.5）](docs/20261004_chimelauncher-user-manual.md)** — GitHub上で本文・画像・目次をそのまま読めます。
+- [PDF版をダウンロード](output/pdf/20261004_chimelauncher-user-manual.pdf)
+- [Markdown・画像一式（ZIP）](output/pdf/20261004_chimelauncher-manual-source.zip)
+
+---
+
 [正式版v1.3.5](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.5)向けの実装です。本体は **Build 26**、Chime Discover Companionは **Build 9**。ユーザーによるpreview05の実機動作確認が完了し、正式公開を承認済みです。正式版APKの再インストールは未確認です。
 
 v1.3.5ではGoogle Discoverと独自フィードを個別の表示トグルに変更しました。GoogleのみONならHOME→All Apps→Google Discoverの順に移動します。Google Appの自動起動設定を廃止し、設定変更時のスクロール位置を保持。HOMEで戻る操作をしても画面を維持します。
