@@ -11,7 +11,7 @@ import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.systemGestures
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
@@ -54,7 +54,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,7 +105,6 @@ fun SearchOverlay(
     configuredShortcuts: List<LayoutItem>,
     usageMap: Map<String, AppUsageMetric> = emptyMap(),
     hasUsageAccessPermission: Boolean = true,
-    searchIndexEdgeDistanceDp: Int = 32,
     searchEngine: SearchEngine,
     appDiscoveryRepository: AppDiscoveryRepository,
     onLaunchApp: (AppInfo) -> Unit,
@@ -114,6 +115,8 @@ fun SearchOverlay(
     onDismiss: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    var fieldRightPx by remember { mutableStateOf<Float?>(null) }
+    var contentRightPx by remember { mutableStateOf<Float?>(null) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -202,6 +205,7 @@ fun SearchOverlay(
                     modifier = Modifier
                         .weight(1f)
                         .focusRequester(focusRequester)
+                        .onGloballyPositioned { fieldRightPx = it.boundsInRoot().right }
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -227,10 +231,23 @@ fun SearchOverlay(
                 val positions = remember(indexedApps, suggestions.size) {
                     AppListIndex.positions(indexedApps, suggestions.size + 1)
                 }
-                BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()
+                    .onGloballyPositioned { contentRightPx = it.boundsInRoot().right }) {
                     val density = LocalDensity.current
-                    val systemGestureDp = with(density) { WindowInsets.systemGestures.getRight(this, LocalLayoutDirection.current).toDp().value }
-                    val edgeDistance = AppIndexLayout.edgeDistanceDp(searchIndexEdgeDistanceDp, systemGestureDp, maxWidth.value).dp
+                    val trailingGap = with(density) {
+                        ((contentRightPx ?: 0f) - (fieldRightPx ?: 0f)).coerceAtLeast(0f).toDp()
+                    }
+                    val imeBottom = WindowInsets.ime.getBottom(density)
+                    var initialGeometry by remember(maxWidth) { mutableStateOf<AppIndexLayout.Geometry?>(null) }
+                    LaunchedEffect(maxHeight, imeBottom) {
+                        if (initialGeometry == null) {
+                            // Wait for the initial IME animation to settle, then retain this
+                            // geometry for the search session even when the keyboard closes.
+                            delay(if (imeBottom > 0) 180 else 650)
+                            initialGeometry = AppIndexLayout.initialGeometry(maxHeight.value)
+                        }
+                    }
+                    val geometry = initialGeometry ?: AppIndexLayout.initialGeometry(maxHeight.value)
                     Row(Modifier.fillMaxSize()) {
                         LazyColumn(
                             state = listState,
@@ -269,7 +286,8 @@ fun SearchOverlay(
                         }
                         CompactAppIndex(
                             positions = positions,
-                            edgeDistance = edgeDistance,
+                            trailingGap = trailingGap,
+                            geometry = geometry,
                             onSelect = { target ->
                                 indexJumpJob?.cancel()
                                 indexJumpJob = scope.launch { listState.scrollToItem(target) }
@@ -514,18 +532,18 @@ private fun searchAppDragModifier(app: AppInfo): Modifier {
 @Composable
 private fun CompactAppIndex(
     positions: Map<String, Int>,
-    edgeDistance: androidx.compose.ui.unit.Dp,
+    trailingGap: androidx.compose.ui.unit.Dp,
+    geometry: AppIndexLayout.Geometry,
     onSelect: (Int) -> Unit,
     onFinish: () -> Unit
 ) {
     var selected by remember { mutableStateOf<String?>(null) }
     val labels = AppListIndex.labels
+    val labelStarts = remember { FloatArray(labels.size) }
     val density = LocalDensity.current
-    BoxWithConstraints(Modifier.width(28.dp + (edgeDistance - 16.dp)).fillMaxHeight()) {
-        // Preserve the previous center while extending the rail by 1.5x. With the
-        // IME visible, use all available height and keep its geometry fixed until release.
-        val railHeight = AppIndexLayout.heightDp(maxHeight.value).dp
-        val top = AppIndexLayout.topDp(maxHeight.value, railHeight.value).dp
+    Box(Modifier.width(28.dp + trailingGap).fillMaxHeight()) {
+        val railHeight = geometry.heightDp.dp
+        val top = geometry.topDp.dp
         val labelSize = (railHeight.value / labels.size * 0.82f / density.fontScale).sp
         Column(
             Modifier.offset(y = top).width(28.dp).height(railHeight)
@@ -534,7 +552,7 @@ private fun CompactAppIndex(
                         val down = awaitFirstDown()
                         down.consume()
                         fun select(y: Float) {
-                            val index = (y / size.height * labels.size).toInt().coerceIn(labels.indices)
+                            val index = AppIndexLayout.labelIndex(y, labelStarts)
                             val label = labels[index]
                             if (selected != label) {
                                 selected = label
@@ -557,8 +575,10 @@ private fun CompactAppIndex(
                 },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            labels.forEach { label ->
-                Box(Modifier.fillMaxWidth().weight(1f).semantics {
+            labels.forEachIndexed { index, label ->
+                Box(Modifier.fillMaxWidth().weight(1f)
+                    .onGloballyPositioned { labelStarts[index] = it.positionInParent().y }
+                    .semantics {
                     positions[label]?.let { target ->
                         onClick(label = "$label へ移動") {
                             onSelect(target)

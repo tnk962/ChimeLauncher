@@ -8,28 +8,25 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AppIndexLayoutTest {
-    @Test fun followsSystemGestureWidthAndHonorsLargerManualDistance() {
-        assertEquals(32f, AppIndexLayout.edgeDistanceDp(32, 0f, 448f), 0f)
-        assertEquals(64f, AppIndexLayout.edgeDistanceDp(32, 56f, 448f), 0f)
-        assertEquals(80f, AppIndexLayout.edgeDistanceDp(80, 56f, 448f), 0f)
+    @Test fun initialKeyboardLayoutStartsNearTheTop() {
+        assertEquals(AppIndexLayout.Geometry(8f, 384f), AppIndexLayout.initialGeometry(400f))
     }
-    @Test fun boundsImportedValuesAndPreservesListSpaceInNarrowWindows() {
-        assertEquals(32f, AppIndexLayout.edgeDistanceDp(-200, 0f, 448f), 0f)
-        assertEquals(128f, AppIndexLayout.edgeDistanceDp(999, 0f, 448f), 0f)
-        assertEquals(48f, AppIndexLayout.edgeDistanceDp(128, 100f, 220f), 0f)
+    @Test fun noKeyboardLayoutRetainsTheEstablishedCenter() {
+        assertEquals(AppIndexLayout.Geometry(120f, 480f), AppIndexLayout.initialGeometry(714f))
     }
-    @Test fun railIsOneAndAHalfTimesTallAtTheSameCenter() {
-        val height = AppIndexLayout.heightDp(714f)
-        assertEquals(480f, height, 0f)
-        assertEquals(120f, AppIndexLayout.topDp(714f, height), 0f)
-    }
-    @Test fun keyboardAndShortWindowsKeepEntireRailInsideAvailableHeight() {
+    @Test fun shortWindowsKeepTheEntireInitialRailInsideAvailableHeight() {
         for (available in listOf(400f, 180f, 40f)) {
-            val height = AppIndexLayout.heightDp(available)
-            val top = AppIndexLayout.topDp(available, height)
-            assertTrue(top >= 0f)
-            assertTrue(top + height <= available)
+            val geometry = AppIndexLayout.initialGeometry(available)
+            assertTrue(geometry.topDp >= 0f)
+            assertTrue(geometry.topDp + geometry.heightDp <= available)
         }
+    }
+    @Test fun hitTestingUsesActualRoundedSectionStarts() {
+        val starts = floatArrayOf(0f, 15f, 30f, 46f)
+        assertEquals(0, AppIndexLayout.labelIndex(-5f, starts))
+        assertEquals(1, AppIndexLayout.labelIndex(29f, starts))
+        assertEquals(2, AppIndexLayout.labelIndex(30f, starts))
+        assertEquals(3, AppIndexLayout.labelIndex(100f, starts))
     }
     @Test fun oldSettingsGetDefaultAndNewBackupPreservesDistance() {
         assertEquals(32, Json.decodeFromString<LauncherSettings>("{}").searchIndexEdgeDistanceDp)

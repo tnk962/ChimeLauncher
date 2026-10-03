@@ -1,12 +1,16 @@
 package com.myenvironment.launcher.core.search
 
 object AppIndexLayout {
-    fun edgeDistanceDp(configured: Int, systemGestureDp: Float, availableWidthDp: Float): Float =
-        maxOf(configured.coerceIn(32, 128).toFloat(), systemGestureDp + 8f)
-            .coerceAtMost((availableWidthDp - 172f).coerceAtLeast(16f))
+    data class Geometry(val topDp: Float, val heightDp: Float)
 
-    fun heightDp(availableHeightDp: Float): Float = minOf(480f, (availableHeightDp - 16f).coerceAtLeast(1f))
+    fun labelIndex(y: Float, starts: FloatArray): Int =
+        starts.indexOfLast { y >= it }.coerceAtLeast(0)
 
-    fun topDp(availableHeightDp: Float, heightDp: Float): Float =
-        (360f - heightDp / 2f).coerceIn(0f, (availableHeightDp - heightDp - 8f).coerceAtLeast(0f))
+    /** Capture once after the initial keyboard layout; do not recalculate on IME dismissal. */
+    fun initialGeometry(availableHeightDp: Float): Geometry {
+        val height = minOf(480f, (availableHeightDp - 16f).coerceAtLeast(1f))
+        val top = (360f - height / 2f)
+            .coerceIn(0f, (availableHeightDp - height - 8f).coerceAtLeast(0f))
+        return Geometry(top, height)
+    }
 }
