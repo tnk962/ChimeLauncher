@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -59,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -167,13 +169,13 @@ fun SettingsScreen(
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // トップバー
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            // タイトルとHOMEボタンを上段、ビルド情報を下段に配置する。
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     if (!isEmbeddedPage) {
                         IconButton(onClick = onClose) {
                             Icon(
@@ -182,36 +184,33 @@ fun SettingsScreen(
                                 tint = Color.White
                             )
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                     }
-                    Column {
-                        Text(
-                            text = "Chime Launcher 設定",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE} • ${BuildConfig.BUILD_TIMESTAMP})",
-                            color = Color(0xFF9AA0A6),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-
-            }
-
-            if (isEmbeddedPage) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    FilledTonalButton(onClick = onClose) {
-                        Icon(Icons.Default.Home, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("HOMEへ", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                    Text(
+                        text = "Chime Launcher 設定",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontSize = 18.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isEmbeddedPage) {
+                        FilledTonalButton(
+                            onClick = onClose,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Home, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("HOMEへ", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                        }
                     }
                 }
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE} • ${BuildConfig.BUILD_TIMESTAMP})",
+                    color = Color(0xFF9AA0A6),
+                    fontSize = 11.sp
+                )
             }
 
             if (!statusMessage.isNullOrBlank()) {
