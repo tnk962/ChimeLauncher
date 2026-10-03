@@ -117,6 +117,9 @@ fun SearchOverlay(
     var query by remember { mutableStateOf("") }
     var fieldRightPx by remember { mutableStateOf<Float?>(null) }
     var contentRightPx by remember { mutableStateOf<Float?>(null) }
+    var contentTopPx by remember { mutableStateOf(0f) }
+    var initialHeadingCenterPx by remember { mutableStateOf<Float?>(null) }
+    var currentHeadingCenterPx by remember { mutableStateOf<Float?>(null) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -232,22 +235,32 @@ fun SearchOverlay(
                     AppListIndex.positions(indexedApps, suggestions.size + 1)
                 }
                 BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()
-                    .onGloballyPositioned { contentRightPx = it.boundsInRoot().right }) {
+                    .onGloballyPositioned {
+                        contentRightPx = it.boundsInRoot().right
+                        contentTopPx = it.boundsInRoot().top
+                    }) {
                     val density = LocalDensity.current
                     val trailingGap = with(density) {
                         ((contentRightPx ?: 0f) - (fieldRightPx ?: 0f)).coerceAtLeast(0f).toDp()
                     }
                     val imeBottom = WindowInsets.ime.getBottom(density)
                     var initialGeometry by remember(maxWidth) { mutableStateOf<AppIndexLayout.Geometry?>(null) }
-                    LaunchedEffect(maxHeight, imeBottom) {
-                        if (initialGeometry == null) {
+                    LaunchedEffect(maxHeight, imeBottom, currentHeadingCenterPx) {
+                        if (initialGeometry == null || initialHeadingCenterPx == null) {
                             // Wait for the initial IME animation to settle, then retain this
                             // geometry for the search session even when the keyboard closes.
                             delay(if (imeBottom > 0) 180 else 650)
-                            initialGeometry = AppIndexLayout.initialGeometry(maxHeight.value)
+                            if (initialGeometry == null) initialGeometry = AppIndexLayout.initialGeometry(maxHeight.value)
+                            initialHeadingCenterPx = currentHeadingCenterPx
                         }
                     }
-                    val geometry = initialGeometry ?: AppIndexLayout.initialGeometry(maxHeight.value)
+                    val sizing = initialGeometry ?: AppIndexLayout.initialGeometry(maxHeight.value)
+                    val headingOffsetDp = (initialHeadingCenterPx ?: currentHeadingCenterPx)?.let { center ->
+                        with(density) { (center - contentTopPx).toDp().value }
+                    }
+                    val geometry = sizing.copy(topDp = headingOffsetDp?.let {
+                        AppIndexLayout.anchorTopDp(it, sizing.heightDp, AppListIndex.labels.size)
+                    } ?: sizing.topDp)
                     Row(Modifier.fillMaxSize()) {
                         LazyColumn(
                             state = listState,
@@ -266,7 +279,13 @@ fun SearchOverlay(
                             }
                             indexedApps.groupBy { AppListIndex.section(it.label) }.forEach { (section, apps) ->
                                 item(key = "index_$section") {
-                                    SearchSectionHeader(if (section == "#") "その他" else section)
+                                    SearchSectionHeader(if (section == "#") "その他" else section,
+                                        textModifier = Modifier.onGloballyPositioned {
+                                            if (initialHeadingCenterPx == null &&
+                                                section == indexedApps.firstOrNull()?.let { app -> AppListIndex.section(app.label) }) {
+                                                currentHeadingCenterPx = it.boundsInRoot().center.y
+                                            }
+                                        })
                                 }
                                 items(apps, key = { "all_${it.componentKey}:${it.userSerialNumber}" }) { app ->
                                     SearchAppRow(app, appDiscoveryRepository) {
@@ -506,14 +525,14 @@ private fun ZeroQueryAppRowSection(
 }
 
 @Composable
-private fun SearchSectionHeader(title: String) {
+private fun SearchSectionHeader(title: String, textModifier: Modifier = Modifier) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = title,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
-            modifier = Modifier.padding(vertical = 4.dp)
+            modifier = Modifier.padding(vertical = 4.dp).then(textModifier)
         )
         HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
     }

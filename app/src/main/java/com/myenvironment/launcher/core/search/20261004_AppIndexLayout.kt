@@ -3,6 +3,9 @@ package com.myenvironment.launcher.core.search
 object AppIndexLayout {
     data class Geometry(val topDp: Float, val heightDp: Float)
 
+    fun anchorTopDp(headingCenterDp: Float, railHeightDp: Float, sectionCount: Int): Float =
+        (headingCenterDp - railHeightDp / sectionCount / 2f).coerceAtLeast(0f)
+
     fun labelIndex(y: Float, starts: FloatArray): Int =
         starts.indexOfLast { y >= it }.coerceAtLeast(0)
 

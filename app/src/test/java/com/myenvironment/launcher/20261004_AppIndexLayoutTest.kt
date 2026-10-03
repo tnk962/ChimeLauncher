@@ -21,6 +21,10 @@ class AppIndexLayoutTest {
             assertTrue(geometry.topDp + geometry.heightDp <= available)
         }
     }
+    @Test fun firstLetterCenterMatchesTheAppListHeading() {
+        assertEquals(200f, AppIndexLayout.anchorTopDp(205f, 370f, 37), 0f)
+        assertEquals(0f, AppIndexLayout.anchorTopDp(1f, 370f, 37), 0f)
+    }
     @Test fun hitTestingUsesActualRoundedSectionStarts() {
         val starts = floatArrayOf(0f, 15f, 30f, 46f)
         assertEquals(0, AppIndexLayout.labelIndex(-5f, starts))
