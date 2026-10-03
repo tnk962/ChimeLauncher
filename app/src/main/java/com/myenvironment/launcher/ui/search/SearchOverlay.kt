@@ -275,17 +275,16 @@ fun SearchOverlay(
                                 }
                             }
                             item(key = "all_apps_title") {
-                                SearchSectionHeader("すべてのアプリ (${indexedApps.size})")
+                                SearchSectionHeader("すべてのアプリ (${indexedApps.size})",
+                                    textModifier = Modifier.onGloballyPositioned {
+                                        if (initialHeadingCenterPx == null) {
+                                            currentHeadingCenterPx = it.boundsInRoot().center.y
+                                        }
+                                    })
                             }
                             indexedApps.groupBy { AppListIndex.section(it.label) }.forEach { (section, apps) ->
                                 item(key = "index_$section") {
-                                    SearchSectionHeader(if (section == "#") "その他" else section,
-                                        textModifier = Modifier.onGloballyPositioned {
-                                            if (initialHeadingCenterPx == null &&
-                                                section == indexedApps.firstOrNull()?.let { app -> AppListIndex.section(app.label) }) {
-                                                currentHeadingCenterPx = it.boundsInRoot().center.y
-                                            }
-                                        })
+                                    SearchSectionHeader(if (section == "#") "その他" else section)
                                 }
                                 items(apps, key = { "all_${it.componentKey}:${it.userSerialNumber}" }) { app ->
                                     SearchAppRow(app, appDiscoveryRepository) {

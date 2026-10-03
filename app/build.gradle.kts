@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 31
-        versionName = "1.3.6-preview.5"
+        versionCode = 32
+        versionName = "1.3.6-preview.6"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-04\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"更新確認時の表示位置を維持。検索候補と全アプリの縦一覧を表示。索引を検索欄の右端に揃え、候補欄の下のアプリ一覧先頭にAを揃えます。キーボードを閉じても文字サイズと配置を維持します。なぞった文字を拡大表示し、一覧をスクロールするとキーボードを閉じます。\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"更新確認時の表示位置を維持。検索候補と全アプリの縦一覧を表示。索引を検索欄の右端に揃え、「すべてのアプリ」の見出しの高さに索引のAを揃えます。キーボードを閉じても文字サイズと配置を維持します。なぞった文字を拡大表示し、一覧をスクロールするとキーボードを閉じます。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
