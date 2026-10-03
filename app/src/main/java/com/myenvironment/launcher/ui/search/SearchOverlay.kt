@@ -310,7 +310,12 @@ fun SearchOverlay(
                                 indexJumpJob?.cancel()
                                 indexJumpJob = scope.launch { listState.scrollToItem(target) }
                             },
-                            onFinish = { keyboardController?.hide() }
+                            onTouchStart = {
+                                // Retain the current rail before IME dismissal changes constraints.
+                                if (initialGeometry == null) initialGeometry = sizing
+                                if (initialHeadingCenterPx == null) initialHeadingCenterPx = currentHeadingCenterPx
+                                keyboardController?.hide()
+                            }
                         )
                     }
                 }
@@ -553,7 +558,7 @@ private fun CompactAppIndex(
     trailingGap: androidx.compose.ui.unit.Dp,
     geometry: AppIndexLayout.Geometry,
     onSelect: (Int) -> Unit,
-    onFinish: () -> Unit
+    onTouchStart: () -> Unit
 ) {
     var selected by remember { mutableStateOf<String?>(null) }
     val labels = AppListIndex.labels
@@ -569,6 +574,7 @@ private fun CompactAppIndex(
                     awaitEachGesture {
                         val down = awaitFirstDown()
                         down.consume()
+                        onTouchStart()
                         fun select(y: Float) {
                             val index = AppIndexLayout.labelIndex(y, labelStarts)
                             val label = labels[index]
@@ -587,7 +593,6 @@ private fun CompactAppIndex(
                             }
                         } finally {
                             selected = null
-                            onFinish()
                         }
                     }
                 },
@@ -599,8 +604,8 @@ private fun CompactAppIndex(
                     .semantics {
                     positions[label]?.let { target ->
                         onClick(label = "$label へ移動") {
+                            onTouchStart()
                             onSelect(target)
-                            onFinish()
                             true
                         }
                     }
