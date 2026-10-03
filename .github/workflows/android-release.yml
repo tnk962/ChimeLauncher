@@ -8,6 +8,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to verify/publish (leave empty for a build only)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -18,16 +23,19 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAS_DISTRIBUTION_KEY: ${{ secrets.CHIME_KEYSTORE_BASE64 != '' }}
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag || '' }}
 
     steps:
       - name: Require distribution signing key for a tagged release
-        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_DISTRIBUTION_KEY != 'true'
+        if: env.RELEASE_TAG != '' && env.HAS_DISTRIBUTION_KEY != 'true'
         run: |
           echo "::error::A tagged release requires CHIME_KEYSTORE_BASE64; refusing to report an unpublished release as successful."
           exit 1
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -59,7 +67,7 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest :app:assembleRelease :discover-companion:assembleRelease
 
       - name: Verify tagged APK versions and shared signing certificate
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         run: |
           python3 - <<'PY_CHECK'
           import os
@@ -67,7 +75,10 @@ jobs:
           import re
           import subprocess
 
-          expected = os.environ["GITHUB_REF"].removeprefix("refs/tags/v")
+          release_tag = os.environ["RELEASE_TAG"]
+          if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-preview[.\d]*)?", release_tag):
+              raise SystemExit(f"Unsupported release tag: {release_tag}")
+          expected = release_tag.removeprefix("v")
           tool_dirs = list((Path(os.environ["ANDROID_HOME"]) / "build-tools").iterdir())
           tools = max((p for p in tool_dirs if (p / "aapt").is_file() and (p / "apksigner").is_file()),
                       key=lambda p: tuple(int(n) for n in re.findall(r"\d+", p.name)))
@@ -81,7 +92,16 @@ jobs:
               if actual_package != package or actual_version != expected:
                   raise SystemExit(f"APK metadata mismatch: {apk}: {actual_package} {actual_version}; expected {package} {expected}")
               signing = subprocess.check_output([str(tools / "apksigner"), "verify", "--print-certs", apk], text=True)
-              certificates.append(re.search(r"Signer #1 certificate SHA-256 digest: ([0-9a-f]+)", signing).group(1))
+              # Signer labels vary across apksigner versions (number, SDK range, V2/V3, etc.).
+              for line in signing.splitlines():
+                  if "certificate SHA-256 digest:" in line:
+                      print("apksigner certificate label:", line.split(" certificate SHA-256 digest:", 1)[0])
+              apk_certificates = {digest.lower() for digest in re.findall(
+                  r"^[ \t]*(?:Signer[^\r\n]*|V\d+(?:\.\d+)? Signer:[^\r\n]*) certificate SHA-256 digest: ([0-9a-fA-F]{64})[ \t\r]*$",
+                  signing, re.MULTILINE)}
+              if len(apk_certificates) != 1:
+                  raise SystemExit(f"Expected one signing certificate in apksigner output: {apk}")
+              certificates.append(apk_certificates.pop())
               print(f"Verified {apk}: {actual_package} v{actual_version}")
           if len(set(certificates)) != 1:
               raise SystemExit("Launcher and Companion signing certificates differ")
@@ -100,12 +120,12 @@ jobs:
             ChimeLauncher-latest.apk
             ChimeDiscoverCompanion-latest.apk
 
-      - name: Publish to GitHub Releases (on tag push)
-        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_DISTRIBUTION_KEY == 'true'
+      - name: Publish to GitHub Releases (tag push or selected tag)
+        if: env.RELEASE_TAG != '' && env.HAS_DISTRIBUTION_KEY == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          TAG_NAME="$RELEASE_TAG"
           APK_RELEASE="ChimeLauncher-${TAG_NAME}.apk"
           APK_COMPANION="ChimeDiscoverCompanion-${TAG_NAME}.apk"
           cp app/build/outputs/apk/release/app-release.apk "${APK_RELEASE}"
