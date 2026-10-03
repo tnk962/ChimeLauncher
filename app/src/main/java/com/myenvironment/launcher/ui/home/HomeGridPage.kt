@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,6 +49,7 @@ import com.myenvironment.launcher.core.model.ItemType
 import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.core.model.LayoutItem
 import com.myenvironment.launcher.core.widget.WidgetHostManager
+import com.myenvironment.launcher.ui.components.launcherDragSource
 import com.myenvironment.launcher.ui.components.LauncherItemGraphic
 import com.myenvironment.launcher.ui.components.launcherVerticalSwipeGestures
 import kotlin.math.roundToInt
@@ -57,6 +57,8 @@ import kotlin.math.roundToInt
 /**
  * ページ内およびページを跨ぐドラッグ＆ドロップ状態
  */
+enum class DragOrigin { HOME, SEARCH, ALL_APPS, DOCK }
+
 data class CrossPageDragState(
     val item: LayoutItem,
     val sourcePageId: String,
@@ -67,8 +69,11 @@ data class CrossPageDragState(
     val itemWidthPx: Float,
     val itemHeightPx: Float,
     val topLeftInRoot: Offset,
-    val fingerInRoot: Offset
-)
+    val fingerInRoot: Offset,
+    val origin: DragOrigin = DragOrigin.HOME
+) {
+    val isAppAddition: Boolean get() = origin == DragOrigin.SEARCH || origin == DragOrigin.ALL_APPS
+}
 
 /**
  * 各 [HomeGridPage] の画面ルート上の描画領域およびセル寸法
@@ -134,10 +139,6 @@ fun HomeGridPage(
     highlightedDropCell: GridPosition? = null,
     availableHomePages: List<LauncherPage> = emptyList(),
     onGridMetricsChanged: (HomePageGridMetrics) -> Unit = {},
-    onDragStartItem: (CrossPageDragState) -> Unit = {},
-    onDragUpdateItem: (CrossPageDragState) -> Unit = {},
-    onDragEndItem: (CrossPageDragState) -> Unit = {},
-    onDragCancelItem: () -> Unit = {},
     onMoveItemToAnotherPage: (LayoutItem, String?) -> Unit = { _, _ -> },
     isSwipeGestureEnabled: Boolean = !isEditMode,
     modifier: Modifier = Modifier
@@ -290,6 +291,9 @@ fun HomeGridPage(
 
             // 1.5. ドラッグ中のドロップ予定セル範囲ハイライト（ページ内・ページ跨ぎ共通）
             if (activeDragState != null && highlightedDropCell != null) {
+                val dropColor = if (activeDragState.isAppAddition && items.any {
+                    highlightedDropCell in it.occupiedCells(isExpanded, safeCols, safeRows)
+                }) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 val dropSpanX = activeDragState.spanX.coerceIn(1, safeCols)
                 val dropSpanY = activeDragState.spanY.coerceIn(1, safeRows)
                 Box(
@@ -304,10 +308,10 @@ fun HomeGridPage(
                         )
                         .padding(2.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
+                        .background(dropColor.copy(alpha = 0.28f))
                         .border(
                             width = 2.dp,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = dropColor,
                             shape = RoundedCornerShape(10.dp)
                         )
                 )
@@ -369,81 +373,20 @@ fun HomeGridPage(
                                 Modifier
                             }
                         )
-                        // 編集モードでのドラッグ移動（画面端ホバーでページ遷移＆別ページへのドロップに対応）
-                        .then(
-                            if (isEditMode) {
-                                Modifier.pointerInput(
-                                    item.id,
-                                    page.id,
-                                    pos,
-                                    effectiveSpanX,
-                                    effectiveSpanY,
-                                    safeCols,
-                                    safeRows,
-                                    cellWidthPx,
-                                    cellHeightPx
-                                ) {
-                                    var grabOffsetInItem = Offset.Zero
-                                    var latestDragState: CrossPageDragState? = null
-
-                                    detectDragGestures(
-                                        onDragStart = { startOffset ->
-                                            grabOffsetInItem = startOffset
-                                            val coords = itemBoxCoords ?: return@detectDragGestures
-                                            val fingerRoot = coords.localToRoot(startOffset)
-                                            val topLeftRoot = fingerRoot - grabOffsetInItem
-                                            val state = CrossPageDragState(
-                                                item = item,
-                                                sourcePageId = page.id,
-                                                spanX = effectiveSpanX,
-                                                spanY = effectiveSpanY,
-                                                itemWidthDp = itemWidthDp,
-                                                itemHeightDp = itemHeightDp,
-                                                itemWidthPx = cellWidthPx * effectiveSpanX,
-                                                itemHeightPx = cellHeightPx * effectiveSpanY,
-                                                topLeftInRoot = topLeftRoot,
-                                                fingerInRoot = fingerRoot
-                                            )
-                                            latestDragState = state
-                                            onDragStartItem(state)
-                                        },
-                                        onDrag = { change, _ ->
-                                            change.consume()
-                                            val coords = itemBoxCoords ?: return@detectDragGestures
-                                            val fingerRoot = coords.localToRoot(change.position)
-                                            val topLeftRoot = fingerRoot - grabOffsetInItem
-                                            val state = CrossPageDragState(
-                                                item = item,
-                                                sourcePageId = page.id,
-                                                spanX = effectiveSpanX,
-                                                spanY = effectiveSpanY,
-                                                itemWidthDp = itemWidthDp,
-                                                itemHeightDp = itemHeightDp,
-                                                itemWidthPx = cellWidthPx * effectiveSpanX,
-                                                itemHeightPx = cellHeightPx * effectiveSpanY,
-                                                topLeftInRoot = topLeftRoot,
-                                                fingerInRoot = fingerRoot
-                                            )
-                                            latestDragState = state
-                                            onDragUpdateItem(state)
-                                        },
-                                        onDragEnd = {
-                                            val finalState = latestDragState
-                                            latestDragState = null
-                                            if (finalState != null) {
-                                                onDragEndItem(finalState)
-                                            } else {
-                                                onDragCancelItem()
-                                            }
-                                        },
-                                        onDragCancel = {
-                                            latestDragState = null
-                                            onDragCancelItem()
-                                        }
-                                    )
-                                }
-                            } else {
-                                Modifier
+                        .launcherDragSource(
+                            key = "home:${page.id}:${item.id}", origin = DragOrigin.HOME,
+                            enabled = isEditMode, afterLongPress = false,
+                            onLongPressRelease = { activeMenuItem = item },
+                            createState = { finger ->
+                                val coords = itemBoxCoords
+                                if (coords == null || !coords.isAttached) null else CrossPageDragState(
+                                    item = item, sourcePageId = page.id,
+                                    spanX = effectiveSpanX, spanY = effectiveSpanY,
+                                    itemWidthDp = itemWidthDp, itemHeightDp = itemHeightDp,
+                                    itemWidthPx = cellWidthPx * effectiveSpanX,
+                                    itemHeightPx = cellHeightPx * effectiveSpanY,
+                                    topLeftInRoot = coords.boundsInRoot().topLeft, fingerInRoot = finger
+                                )
                             }
                         )
                         .then(
@@ -456,8 +399,8 @@ fun HomeGridPage(
                                             onItemClick(item, isInstalled)
                                         }
                                     },
-                                    onLongClick = {
-                                        activeMenuItem = item
+                                    onLongClick = if (isEditMode) null else {
+                                        { activeMenuItem = item }
                                     }
                                 )
                             } else {

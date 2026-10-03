@@ -6,7 +6,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.heightIn
@@ -35,11 +35,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
+import com.myenvironment.launcher.core.model.LayoutItem
+import com.myenvironment.launcher.core.model.GridPosition
+import com.myenvironment.launcher.core.model.LauncherPage
+import com.myenvironment.launcher.ui.home.CrossPageDragState
+import com.myenvironment.launcher.ui.home.DragOrigin
+import com.myenvironment.launcher.ui.components.launcherDragSource
 import com.myenvironment.launcher.core.model.DockItem
 import com.myenvironment.launcher.core.model.ItemType
 import com.myenvironment.launcher.ui.adaptive.DockPlacement
@@ -65,7 +77,9 @@ fun AdaptiveDock(
     onRemoveDockItem: (DockItem) -> Unit,
     onMoveDockItem: (DockItem, Int) -> Unit,
     onRequestAddDockItem: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSlotBounds: (Int, Rect) -> Unit = { _, _ -> },
+    isDropHovered: Boolean = false
 ) {
     val visibleItems = dockItems.take(iconCount.coerceIn(1, 12))
     BoxWithConstraints(modifier = modifier) {
@@ -81,7 +95,7 @@ fun AdaptiveDock(
                         .background(Color(0xAA16181E))
                         .border(
                             width = 1.dp,
-                            color = Color.White.copy(alpha = 0.12f),
+                            color = if (isDropHovered) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.12f),
                             shape = RoundedCornerShape(26.dp)
                         )
                         .padding(horizontal = 12.dp, vertical = 10.dp)
@@ -91,6 +105,7 @@ fun AdaptiveDock(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     visibleItems.forEachIndexed { index, item ->
+                        Box(Modifier.onGloballyPositioned { onSlotBounds(index, it.boundsInRoot()) }) {
                         DockItemSlot(
                             item = item,
                             index = index,
@@ -103,6 +118,7 @@ fun AdaptiveDock(
                             onRemove = { onRemoveDockItem(item) },
                             onMove = { delta -> onMoveDockItem(item, delta) }
                         )
+                        }
                     }
 
                     if (isEditMode && dockItems.size < iconCount.coerceIn(1, 12)) {
@@ -133,7 +149,7 @@ fun AdaptiveDock(
                         .background(Color(0xAA16181E))
                         .border(
                             width = 1.dp,
-                            color = Color.White.copy(alpha = 0.12f),
+                            color = if (isDropHovered) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.12f),
                             shape = RoundedCornerShape(26.dp)
                         )
                         .padding(vertical = 16.dp, horizontal = 8.dp)
@@ -143,6 +159,7 @@ fun AdaptiveDock(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     visibleItems.forEachIndexed { index, item ->
+                        Box(Modifier.onGloballyPositioned { onSlotBounds(index, it.boundsInRoot()) }) {
                         DockItemSlot(
                             item = item,
                             index = index,
@@ -155,6 +172,7 @@ fun AdaptiveDock(
                             onRemove = { onRemoveDockItem(item) },
                             onMove = { delta -> onMoveDockItem(item, delta) }
                         )
+                        }
                     }
 
                     if (isEditMode && dockItems.size < iconCount.coerceIn(1, 12)) {
@@ -199,6 +217,7 @@ private fun DockItemSlot(
     }
 
     var menuExpanded by remember { mutableStateOf(false) }
+    val dragSizePx = with(LocalDensity.current) { 56.dp.toPx() }
 
     Box(contentAlignment = Alignment.Center) {
         LauncherItemGraphic(
@@ -213,10 +232,23 @@ private fun DockItemSlot(
             showLabel = false,
             isEditMode = isEditMode,
             modifier = Modifier
-                .combinedClickable(
-                    onClick = { onClick(isInstalled) },
-                    onLongClick = { menuExpanded = true }
+                .launcherDragSource(
+                    key = "dock:${item.id}", origin = DragOrigin.DOCK,
+                    onLongPressRelease = { menuExpanded = true },
+                    createState = { finger ->
+                        CrossPageDragState(
+                            item = LayoutItem(item.id, LauncherPage.PAGE_ID_HOME, item.type,
+                                item.packageName, item.activityName, item.targetUri, item.label, GridPosition(0, 0)),
+                            sourcePageId = LauncherPage.PAGE_ID_HOME, spanX = 1, spanY = 1,
+                            itemWidthDp = 56.dp, itemHeightDp = 56.dp,
+                            itemWidthPx = dragSizePx, itemHeightPx = dragSizePx,
+                            topLeftInRoot = finger - androidx.compose.ui.geometry.Offset(dragSizePx / 2, dragSizePx / 2),
+                            fingerInRoot = finger, origin = DragOrigin.DOCK
+                        )
+                    }
                 )
+                .semantics { onLongClick("Dockのメニュー") { menuExpanded = true; true } }
+                .clickable { onClick(isInstalled) }
                 .padding(4.dp)
         )
 
