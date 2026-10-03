@@ -34,7 +34,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -70,7 +70,6 @@ import com.myenvironment.launcher.core.feed.overlay.OverlayDragSession
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.LauncherAction
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 /**
  * Page -2: Discover & はてなブックマーク 統合フィードページ (仕様 27, 28, 29 / v0.5.0)
@@ -92,7 +91,7 @@ fun DiscoverPage(
     val coroutineScope = rememberCoroutineScope()
     val googleOverlay = LocalGoogleOverlayClient.current
     val overlayState = googleOverlay?.state?.collectAsStateWithLifecycle()?.value
-    val overlayEnabled = discoverMode == DiscoverMode.NATIVE_BRIDGE
+    val overlayEnabled = discoverMode.usesGoogleOverlay
     val currentOverlayEnabled by rememberUpdatedState(overlayEnabled)
     val touchSlop = LocalViewConfiguration.current.touchSlop
     var selectedCategory by remember { mutableStateOf(FeedCategory.DISCOVER_CURATED) }
@@ -102,7 +101,6 @@ fun DiscoverPage(
     var showModeDialog by remember { mutableStateOf(false) }
     var hasClearedInitialCache by remember { mutableStateOf(false) }
     val currentSettled by rememberUpdatedState(isSettledOnDiscover)
-    val currentOnOpenGoogleApp by rememberUpdatedState(onOpenGoogleApp)
 
     fun loadCategory(category: FeedCategory, forceRefresh: Boolean = false) {
         if (forceRefresh) {
@@ -128,7 +126,8 @@ fun DiscoverPage(
         }
     }
 
-    LaunchedEffect(selectedCategory) {
+    LaunchedEffect(selectedCategory, discoverMode) {
+        if (!discoverMode.showsCustomFeed) return@LaunchedEffect
         if (!hasClearedInitialCache) {
             feedBridge.clearCache()
             articlesCache.clear()
@@ -143,7 +142,6 @@ fun DiscoverPage(
         modifier = modifier
             .fillMaxSize()
             .pointerInput(googleOverlay, touchSlop) {
-                val thresholdPx = 64.dp.toPx()
                 val bottomChipExclusionPx = 76.dp.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -151,9 +149,6 @@ fun DiscoverPage(
                     if (!currentSettled || down.position.y > size.height - bottomChipExclusionPx) {
                         return@awaitEachGesture
                     }
-                    var totalDx = 0f
-                    var totalDy = 0f
-                    var triggered = false
                     var overlayDragging = false
                     val drag = OverlayDragSession(touchSlop, googleOverlay?.revealWidth ?: size.width.toFloat())
                     try {
@@ -163,8 +158,6 @@ fun DiscoverPage(
                         if (!change.pressed) break
                         val dx = change.position.x - change.previousPosition.x
                         val dy = change.position.y - change.previousPosition.y
-                        totalDx += dx
-                        totalDy += dy
 
                         val progress = if (currentOverlayEnabled) drag.move(dx, dy) {
                             googleOverlay?.beginScroll() == true
@@ -173,12 +166,6 @@ fun DiscoverPage(
                             overlayDragging = true
                             change.consume()
                             googleOverlay?.scroll(progress)
-                        } else if (!triggered && !currentOverlayEnabled &&
-                            totalDx > thresholdPx && abs(totalDx) > abs(totalDy) * 1.3f
-                        ) {
-                            triggered = true
-                            change.consume()
-                            currentOnOpenGoogleApp()
                         }
                       }
                     } finally {
@@ -390,42 +377,27 @@ fun DiscoverPage(
         AlertDialog(
             onDismissRequest = { showModeDialog = false },
             title = {
-                Text("Discover Mode 設定", fontWeight = FontWeight.Bold)
+                Text("フィード表示", fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DiscoverMode.entries.forEach { mode ->
+                    listOf("Google Discover" to true, "独自フィード" to false).forEach { (label, isGoogle) ->
+                        val checked = if (isGoogle) discoverMode.usesGoogleOverlay else discoverMode.showsCustomFeed
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSelectDiscoverMode(mode)
-                                    showModeDialog = false
-                                }
-                                .padding(vertical = 6.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
                         ) {
-                            RadioButton(
-                                selected = discoverMode == mode,
-                                onClick = {
-                                    onSelectDiscoverMode(mode)
-                                    showModeDialog = false
-                                }
-                            )
-                            Column(modifier = Modifier.padding(start = 8.dp)) {
-                                Text(
-                                    text = mode.displayName,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    text = mode.description,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text(label, modifier = Modifier.weight(1f))
+                            Switch(checked = checked, onCheckedChange = { enabled ->
+                                onSelectDiscoverMode(DiscoverMode.fromVisibility(
+                                    google = if (isGoogle) enabled else discoverMode.usesGoogleOverlay,
+                                    feed = if (isGoogle) discoverMode.showsCustomFeed else enabled
+                                ))
+                            })
                         }
                     }
+                    Text("Google DiscoverにはChime Discover Companionが必要です。")
                 }
             },
             confirmButton = {

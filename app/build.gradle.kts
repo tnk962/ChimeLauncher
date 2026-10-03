@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 20
-        versionName = "1.3.4"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-03\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"更新判定を修正し、古い版へのダウンロードを防止。取得直前に最新版を確認し、本体・CompanionのAPKバージョンを照合。ドラッグ登録・Dock並べ替え・別の指でのページ送りも利用できます。\"")
+        versionCode = 25
+        versionName = "1.3.5-preview05"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-04\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"HOMEで戻る操作をしても画面を維持。Google Discoverと独自フィードを個別のトグルで表示ON/OFF。Google Appの自動起動設定を廃止。設定変更時もページとスクロール位置を保持します。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

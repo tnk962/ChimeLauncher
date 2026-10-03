@@ -210,7 +210,7 @@ class LauncherViewModel(
         ) { usage, hasUsagePerm, updateSt -> Triple(usage, hasUsagePerm, updateSt) }
     ) { (apps, pkgs, uPages), (items, dock, settings), (snaps, overlay, widgets), (usage, hasUsagePerm, updateSt) ->
         val fixedLeftAndHome = buildList {
-            if (settings.discoverMode != DiscoverMode.DISABLED) {
+            if (settings.discoverMode.showsCustomFeed) {
                 add(LauncherPage.FIXED_DISCOVER)
             }
             add(LauncherPage.FIXED_ALL_APPS)
