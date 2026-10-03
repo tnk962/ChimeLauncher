@@ -211,6 +211,12 @@ fun SettingsScreen(
                     color = Color(0xFF9AA0A6),
                     fontSize = 11.sp
                 )
+                Text(
+                    text = BuildConfig.UPDATE_SUMMARY,
+                    color = Color(0xFF9AA0A6),
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
             }
 
             if (!statusMessage.isNullOrBlank()) {
@@ -987,7 +993,7 @@ fun SettingsScreen(
                         color = Color(0x33FFFFFF)
                     )
                     Text(
-                        text = "最新更新 (v1.1.0 - Chime Launcher): GitHub Releases からの新バージョン自動検知と、設定画面から1タップで最新APKをダウンロード＆上書きインストールできるアプリ内アップデート機能を実装。GitHub Actions 自動ビルドおよび署名キー統一にも対応",
+                        text = "最新更新 (v${BuildConfig.VERSION_NAME}): ${BuildConfig.UPDATE_SUMMARY}",
                         color = Color(0xFF9AA0A6),
                         fontSize = 11.sp,
                         lineHeight = 16.sp

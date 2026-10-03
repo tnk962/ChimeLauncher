@@ -1256,6 +1256,38 @@ class LauncherViewModel(
         }
     }
 
+    fun addSearchAppToHome(app: AppInfo, pageId: String, cell: GridPosition, isExpanded: Boolean) = runIfUnlocked {
+        launchLayoutEdit { snapshot ->
+            if (pageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == pageId }) return@launchLayoutEdit
+            val settings = settingsRepository.settings.first()
+            val columns = if (isExpanded) settings.expandedGridColumns else settings.compactGridColumns
+            val rows = if (isExpanded) settings.expandedGridRows else settings.compactGridRows
+            if (!canPlaceSearchApp(snapshot.items, pageId, cell, isExpanded, columns, rows)) {
+                Toast.makeText(container.appContext, "空いているセルにドロップしてください", Toast.LENGTH_SHORT).show()
+                return@launchLayoutEdit
+            }
+            layoutRepository.upsertLayoutItem(LayoutItem(
+                id = UUID.randomUUID().toString(), pageId = pageId, type = ItemType.APP,
+                packageName = app.packageName, activityName = app.activityName, label = app.label,
+                compact = GridPosition(cell.x.coerceIn(0, settings.compactGridColumns - 1),
+                    cell.y.coerceIn(0, settings.compactGridRows - 1)),
+                expanded = if (isExpanded) cell else null
+            ))
+        }
+    }
+
+    fun addSearchAppToDock(app: AppInfo, index: Int) = runIfUnlocked {
+        launchLayoutEdit { snapshot ->
+            val limit = settingsRepository.settings.first().effectiveDockIconCount
+            val item = DockItem(UUID.randomUUID().toString(), index, ItemType.APP,
+                app.packageName, app.activityName, label = app.label)
+            val result = insertSearchDockItem(snapshot.dockItems, item, index, limit)
+            if (result == null) {
+                Toast.makeText(container.appContext, "Dockが満杯です", Toast.LENGTH_SHORT).show()
+            } else layoutRepository.replaceDockItems(result)
+        }
+    }
+
     fun moveLayoutItem(
         item: LayoutItem,
         newPosition: GridPosition,
@@ -1381,6 +1413,13 @@ class LauncherViewModel(
     fun removeDockItem(item: DockItem) = runIfUnlocked {
         launchLayoutEdit { _ ->
             layoutRepository.deleteDockItem(item.id)
+        }
+    }
+
+    fun reorderDockItemByDrop(itemId: String, insertionIndex: Int) = runIfUnlocked {
+        launchLayoutEdit { snapshot ->
+            val reordered = reorderDockByInsertion(snapshot.dockItems, itemId, insertionIndex)
+            if (reordered != snapshot.dockItems) layoutRepository.replaceDockItems(reordered)
         }
     }
 
@@ -1815,4 +1854,26 @@ class LauncherViewModel(
                 }
             }
     }
+}
+
+internal fun canPlaceSearchApp(items: List<LayoutItem>, pageId: String, cell: GridPosition,
+    isExpanded: Boolean, columns: Int, rows: Int): Boolean =
+    cell.x in 0 until columns && cell.y in 0 until rows &&
+        items.none { it.pageId == pageId && cell in it.occupiedCells(isExpanded, columns, rows) }
+
+internal fun insertSearchDockItem(items: List<DockItem>, item: DockItem, index: Int, limit: Int): List<DockItem>? {
+    if (items.size >= limit) return null
+    return items.sortedBy { it.positionIndex }.toMutableList().apply {
+        add(index.coerceIn(0, size), item)
+    }.mapIndexed { position, entry -> entry.copy(positionIndex = position) }
+}
+
+internal fun reorderDockByInsertion(items: List<DockItem>, itemId: String, insertionIndex: Int): List<DockItem> {
+    val ordered = items.sortedBy { it.positionIndex }.toMutableList()
+    val from = ordered.indexOfFirst { it.id == itemId }
+    if (from < 0) return items
+    val insertion = insertionIndex.coerceIn(0, ordered.size)
+    val item = ordered.removeAt(from)
+    ordered.add((if (insertion > from) insertion - 1 else insertion).coerceIn(0, ordered.size), item)
+    return ordered.mapIndexed { index, entry -> entry.copy(positionIndex = index) }
 }

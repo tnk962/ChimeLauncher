@@ -14,9 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 18
-        versionName = "1.3.2"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-03 Settings HOME button fix\"")
+        versionCode = 19
+        versionName = "1.3.3"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-03\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"検索・All Appsからホーム／Dockへドラッグ登録、Dockのドラッグ並べ替え、別の指によるページ送りに対応。長押しメニュー・レイアウトロック・Undoも維持。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

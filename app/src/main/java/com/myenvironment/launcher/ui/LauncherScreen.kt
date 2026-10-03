@@ -52,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,6 +71,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -99,6 +101,10 @@ import com.myenvironment.launcher.ui.editor.ItemPickerDialog
 import com.myenvironment.launcher.ui.editor.LockedAlertDialog
 import com.myenvironment.launcher.ui.editor.PageManagerDialog
 import com.myenvironment.launcher.ui.editor.WidgetResizeDialog
+import com.myenvironment.launcher.ui.components.LauncherDragController
+import com.myenvironment.launcher.ui.components.LocalLauncherDragController
+import com.myenvironment.launcher.ui.components.launcherDragHost
+import com.myenvironment.launcher.ui.home.DragOrigin
 import com.myenvironment.launcher.ui.home.CrossPageDragState
 import com.myenvironment.launcher.ui.home.HomeGridPage
 import com.myenvironment.launcher.ui.home.HomePageGridMetrics
@@ -321,12 +327,17 @@ fun LauncherScreen(
     val pageMetricsMap = remember { mutableStateMapOf<String, HomePageGridMetrics>() }
     var rootBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
     var pagerBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
-
-    // 編集モード終了時はドラッグ状態をクリア
+    var dockBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
+    val dockSlotBounds = remember { mutableStateMapOf<Int, Rect>() }
+    val dragController = remember { LauncherDragController() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var isSecondFingerPaging by remember { mutableStateOf(false) }
+    // Layout changes invalidate both geometry and the drag's original grab offset.
+    LaunchedEffect(adaptiveSpec, uiState.settings.expandedPageLayoutMode, uiState.settings.layoutLocked) {
+        activeDragState = null
+    }
     LaunchedEffect(uiState.overlay.isEditMode) {
-        if (!uiState.overlay.isEditMode) {
-            activeDragState = null
-        }
+        if (!uiState.overlay.isEditMode) activeDragState = null
     }
 
     /**
@@ -334,6 +345,19 @@ fun LauncherScreen(
      */
     fun resolveDropTarget(drag: CrossPageDragState): Triple<String, HomePageGridMetrics, GridPosition>? {
         val sourceMetrics = pageMetricsMap[drag.sourcePageId]
+        if (drag.origin == DragOrigin.DOCK) return null
+        if (drag.isAppAddition) {
+            val visibleIds = if (isDualPageMode) {
+                dualSlots.getOrNull(dualPagerState.currentPage)?.visiblePageIds.orEmpty()
+            } else listOfNotNull(pages.getOrNull(singlePagerState.currentPage)?.id)
+            val targetId = visibleIds.firstOrNull { id ->
+                pages.any { it.id == id && it.isEditableHomePage() } &&
+                    pageMetricsMap[id]?.boundsInRoot?.contains(drag.fingerInRoot) == true
+            } ?: return null
+            val metrics = pageMetricsMap[targetId] ?: return null
+            val centered = drag.fingerInRoot - androidx.compose.ui.geometry.Offset(metrics.cellWidthPx / 2, metrics.cellHeightPx / 2)
+            return Triple(targetId, metrics, metrics.resolveDropCell(centered, 1, 1))
+        }
         if (isDualPageMode) {
             val slot = dualSlots.getOrNull(dualPagerState.currentPage.coerceIn(0, dualSlots.lastIndex))
             val candidatePageIds = slot?.visiblePageIds.orEmpty().filter { pageId ->
@@ -387,7 +411,8 @@ fun LauncherScreen(
     val edgeHoverZonePx = with(density) { 54.dp.toPx() }
     val currentDrag = activeDragState
     val edgeHoverDirection: Int = when {
-        currentDrag == null || pagerBoundsInRoot.width <= 0f -> 0
+        currentDrag == null || currentDrag.origin != DragOrigin.HOME || isSecondFingerPaging ||
+            singlePagerState.isScrollInProgress || dualPagerState.isScrollInProgress || pagerBoundsInRoot.width <= 0f -> 0
         currentDrag.fingerInRoot.x <= pagerBoundsInRoot.left + edgeHoverZonePx -> -1
         currentDrag.fingerInRoot.x >= pagerBoundsInRoot.right - edgeHoverZonePx -> 1
         else -> 0
@@ -619,7 +644,7 @@ fun LauncherScreen(
     }
 
     // Backボタン押下時：オーバーレイや編集モードを閉じ、HOME以外のページにいる場合はHOMEへ戻す (仕様 4)
-    val shouldInterceptBack = (overlayState?.progress ?: 0f) > 0f || uiState.overlay.isSearchOverlayOpen ||
+    val shouldInterceptBack = activeDragState != null || (overlayState?.progress ?: 0f) > 0f || uiState.overlay.isSearchOverlayOpen ||
         uiState.overlay.isSettingsOpen ||
         uiState.overlay.resizingWidgetTarget != null ||
         uiState.overlay.isEditMode ||
@@ -627,9 +652,13 @@ fun LauncherScreen(
 
     BackHandler(enabled = shouldInterceptBack) {
         when {
+            activeDragState != null -> activeDragState = null
             (overlayState?.progress ?: 0f) > 0f -> googleOverlay?.close()
             uiState.overlay.resizingWidgetTarget != null -> viewModel.dismissResizeWidgetDialog()
-            uiState.overlay.isSearchOverlayOpen -> viewModel.closeSearchOverlay()
+            uiState.overlay.isSearchOverlayOpen -> {
+                activeDragState = null
+                viewModel.closeSearchOverlay()
+            }
             uiState.overlay.isSettingsOpen -> viewModel.closeSettings()
             uiState.overlay.isEditMode -> viewModel.exitEditMode()
             currentPage.id != LauncherPage.PAGE_ID_HOME -> {
@@ -638,29 +667,48 @@ fun LauncherScreen(
         }
     }
 
-    val handleDragStart: (CrossPageDragState) -> Unit = { state ->
-        activeDragState = state
-    }
     val handleDragUpdate: (CrossPageDragState) -> Unit = { state ->
         activeDragState = state
     }
     val handleDragCancel: () -> Unit = {
         activeDragState = null
     }
+    fun dockInsertionIndex(finger: androidx.compose.ui.geometry.Offset): Int {
+        val vertical = adaptiveSpec.dockPlacement != DockPlacement.BOTTOM
+        return dockSlotBounds.entries.filter { it.key < uiState.dockItems.size }.sortedBy { it.key }
+            .firstOrNull { (_, bounds) -> if (vertical) finger.y < bounds.center.y else finger.x < bounds.center.x }
+            ?.key ?: uiState.dockItems.size
+    }
     val handleDragEnd: (CrossPageDragState) -> Unit = { finalState ->
-        val resolved = resolveDropTarget(finalState)
-        activeDragState = null
-        if (resolved != null) {
-            val (targetPageId, targetMetrics, targetCell) = resolved
-            viewModel.moveLayoutItem(
-                item = finalState.item,
-                newPosition = targetCell,
-                isExpandedMode = targetMetrics.isExpanded,
-                targetPageId = targetPageId
-            )
+        if (activeDragState != null) {
+            if (finalState.origin == DragOrigin.DOCK) {
+                if (dockBoundsInRoot.contains(finalState.fingerInRoot)) {
+                    viewModel.reorderDockItemByDrop(finalState.item.id, dockInsertionIndex(finalState.fingerInRoot))
+                }
+            } else if (finalState.isAppAddition) {
+                val app = uiState.installedApps.find {
+                    it.packageName == finalState.item.packageName && it.activityName == finalState.item.activityName
+                }
+                if (app != null && dockBoundsInRoot.contains(finalState.fingerInRoot)) {
+                    viewModel.addSearchAppToDock(app, dockInsertionIndex(finalState.fingerInRoot))
+                } else if (app != null) {
+                    val target = resolveDropTarget(finalState)
+                    if (target != null && target.second.boundsInRoot.contains(finalState.fingerInRoot)) {
+                        viewModel.addSearchAppToHome(app, target.first, target.third, target.second.isExpanded)
+                    }
+                }
+            } else {
+                val resolved = resolveDropTarget(finalState)
+                if (resolved != null && resolved.second.boundsInRoot.contains(finalState.fingerInRoot) &&
+                    pages.any { it.id == resolved.first && it.isEditableHomePage() }) {
+                    viewModel.moveLayoutItem(finalState.item, resolved.third, resolved.second.isExpanded, resolved.first)
+                }
+            }
         }
+        activeDragState = null
     }
 
+    CompositionLocalProvider(LocalLauncherDragController provides dragController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -672,6 +720,48 @@ fun LauncherScreen(
             .onGloballyPositioned { coords ->
                 rootBoundsInRoot = coords.boundsInRoot()
             }
+            .launcherDragHost(
+                controller = dragController,
+                activeDrag = { activeDragState },
+                canStart = { origin ->
+                    !uiState.overlay.isSettingsOpen && uiState.overlay.resizingWidgetTarget == null &&
+                        if (uiState.overlay.isSearchOverlayOpen) origin == DragOrigin.SEARCH else origin != DragOrigin.SEARCH
+                },
+                pagerBounds = { pagerBoundsInRoot },
+                onStart = { state ->
+                    if (uiState.settings.layoutLocked) {
+                        viewModel.enterEditMode()
+                        false
+                    } else {
+                        viewModel.enterEditMode()
+                        activeDragState = state
+                        if (state.isAppAddition && !currentPage.isEditableHomePage()) {
+                            viewModel.jumpToPage(LauncherPage.PAGE_ID_HOME)
+                        }
+                        if (state.origin == DragOrigin.SEARCH) {
+                            keyboardController?.hide()
+                            viewModel.closeSearchOverlay()
+                        }
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        true
+                    }
+                },
+                onUpdate = handleDragUpdate, onEnd = handleDragEnd, onCancel = handleDragCancel,
+                onSecondaryActive = { isSecondFingerPaging = it },
+                onPageSwipe = { direction ->
+                    coroutineScope.launch {
+                        if (isDualPageMode) {
+                            val target = dualPagerState.currentPage + direction
+                            if (dualSlots.getOrNull(target)?.visiblePageIds?.any { id ->
+                                    pages.any { it.id == id && it.isEditableHomePage() }
+                                } == true) dualPagerState.animateScrollToPage(target)
+                        } else {
+                            val target = singlePagerState.currentPage + direction
+                            if (pages.getOrNull(target)?.isEditableHomePage() == true) singlePagerState.animateScrollToPage(target)
+                        }
+                    }
+                }
+            )
     ) {
         val mainArea: @Composable (Modifier) -> Unit = { areaModifier ->
             Column(modifier = areaModifier) {
@@ -717,10 +807,6 @@ fun LauncherScreen(
                                     highlightedDropCell = if (currentDropTarget?.first == slot.page.id) currentDropTarget.third else null,
                                     editableHomePages = editableHomePages,
                                     onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                                    onDragStartItem = handleDragStart,
-                                    onDragUpdateItem = handleDragUpdate,
-                                    onDragEndItem = handleDragEnd,
-                                    onDragCancelItem = handleDragCancel,
                                     viewModel = viewModel
                                 )
                             }
@@ -742,10 +828,6 @@ fun LauncherScreen(
                                             highlightedDropCell = if (currentDropTarget?.first == slot.leftPage.id) currentDropTarget.third else null,
                                             editableHomePages = editableHomePages,
                                             onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                                            onDragStartItem = handleDragStart,
-                                            onDragUpdateItem = handleDragUpdate,
-                                            onDragEndItem = handleDragEnd,
-                                            onDragCancelItem = handleDragCancel,
                                             viewModel = viewModel
                                         )
                                     }
@@ -773,10 +855,6 @@ fun LauncherScreen(
                                             highlightedDropCell = if (currentDropTarget?.first == slot.rightPage.id) currentDropTarget.third else null,
                                             editableHomePages = editableHomePages,
                                             onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                                            onDragStartItem = handleDragStart,
-                                            onDragUpdateItem = handleDragUpdate,
-                                            onDragEndItem = handleDragEnd,
-                                            onDragCancelItem = handleDragCancel,
                                             viewModel = viewModel
                                         )
                                     }
@@ -808,10 +886,6 @@ fun LauncherScreen(
                             highlightedDropCell = if (currentDropTarget?.first == page.id) currentDropTarget.third else null,
                             editableHomePages = editableHomePages,
                             onGridMetricsChanged = { pageMetricsMap[it.pageId] = it },
-                            onDragStartItem = handleDragStart,
-                            onDragUpdateItem = handleDragUpdate,
-                            onDragEndItem = handleDragEnd,
-                            onDragCancelItem = handleDragCancel,
                             viewModel = viewModel
                         )
                     }
@@ -857,7 +931,10 @@ fun LauncherScreen(
                 },
                 onRemoveDockItem = { viewModel.removeDockItem(it) },
                 onMoveDockItem = { item, delta -> viewModel.moveDockItem(item, delta) },
-                onRequestAddDockItem = { viewModel.requestAddItemToDock() }
+                onRequestAddDockItem = { viewModel.requestAddItemToDock() },
+                onSlotBounds = { index, bounds -> dockSlotBounds[index] = bounds },
+                isDropHovered = activeDragState?.let { (it.isAppAddition || it.origin == DragOrigin.DOCK) && dockBoundsInRoot.contains(it.fingerInRoot) } == true,
+                modifier = Modifier.onGloballyPositioned { dockBoundsInRoot = it.boundsInRoot() }
             )
         }
         if (adaptiveSpec.dockPlacement == DockPlacement.BOTTOM) {
@@ -934,7 +1011,14 @@ fun LauncherScreen(
             ) {
                 Text(
                     text = edgeTransitionHint
-                        ?: "移動先: $targetPageName ${
+                        ?: if ((drag.isAppAddition || drag.origin == DragOrigin.DOCK) && dockBoundsInRoot.contains(drag.fingerInRoot)) {
+                            if (drag.origin == DragOrigin.DOCK) {
+                                val reordered = reorderDockByInsertion(uiState.dockItems, drag.item.id, dockInsertionIndex(drag.fingerInRoot))
+                                "Dock: ${reordered.indexOfFirst { it.id == drag.item.id } + 1}番目へ移動"
+                            } else if (uiState.dockItems.size >= uiState.settings.effectiveDockIconCount) "Dockが満杯です"
+                            else "Dock: ${dockInsertionIndex(drag.fingerInRoot) + 1}番目に追加"
+                        } else if ((drag.isAppAddition || drag.origin == DragOrigin.DOCK) && currentDropTarget == null) "領域外: 離すとキャンセル"
+                        else "移動先: $targetPageName ${
                             currentDropTarget?.third?.let { "(列${it.x + 1}, 行${it.y + 1})" } ?: ""
                         }",
                     color = if (edgeTransitionHint != null) MaterialTheme.colorScheme.primary else Color.White,
@@ -1246,6 +1330,7 @@ fun LauncherScreen(
             )
         }
     }
+    }
 }
 
 @Composable
@@ -1259,10 +1344,6 @@ private fun LauncherPageContent(
     highlightedDropCell: GridPosition?,
     editableHomePages: List<LauncherPage>,
     onGridMetricsChanged: (HomePageGridMetrics) -> Unit,
-    onDragStartItem: (CrossPageDragState) -> Unit,
-    onDragUpdateItem: (CrossPageDragState) -> Unit,
-    onDragEndItem: (CrossPageDragState) -> Unit,
-    onDragCancelItem: () -> Unit,
     viewModel: LauncherViewModel
 ) {
     val context = LocalContext.current
@@ -1443,10 +1524,6 @@ private fun LauncherPageContent(
                 highlightedDropCell = highlightedDropCell,
                 availableHomePages = editableHomePages,
                 onGridMetricsChanged = onGridMetricsChanged,
-                onDragStartItem = onDragStartItem,
-                onDragUpdateItem = onDragUpdateItem,
-                onDragEndItem = onDragEndItem,
-                onDragCancelItem = onDragCancelItem,
                 onMoveItemToAnotherPage = { item, destPageId ->
                     viewModel.moveItemToAnotherPage(item, destPageId, useExpandedFullGrid)
                 }

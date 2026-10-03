@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -58,6 +59,9 @@ import com.myenvironment.launcher.core.model.LauncherAction
 import com.myenvironment.launcher.core.model.LayoutItem
 import com.myenvironment.launcher.core.search.AppUsageMetric
 import com.myenvironment.launcher.core.search.SearchEngine
+import com.myenvironment.launcher.ui.components.appDragState
+import com.myenvironment.launcher.ui.components.launcherDragSource
+import com.myenvironment.launcher.ui.home.DragOrigin
 import com.myenvironment.launcher.ui.components.LauncherItemGraphic
 import kotlinx.coroutines.delay
 
@@ -195,6 +199,7 @@ fun SearchOverlay(
                                 title = "Recently Used",
                                 apps = zeroSections.recentlyUsed,
                                 appDiscoveryRepository = appDiscoveryRepository,
+                                dragModifier = { app -> searchAppDragModifier(app) },
                                 onAppClick = { app ->
                                     onLaunchApp(app)
                                     onDismiss()
@@ -209,6 +214,7 @@ fun SearchOverlay(
                                 title = "Frequently Used",
                                 apps = zeroSections.frequentlyUsed,
                                 appDiscoveryRepository = appDiscoveryRepository,
+                                dragModifier = { app -> searchAppDragModifier(app) },
                                 onAppClick = { app ->
                                     onLaunchApp(app)
                                     onDismiss()
@@ -223,6 +229,7 @@ fun SearchOverlay(
                                 title = "Recently Installed",
                                 apps = zeroSections.recentlyInstalled,
                                 appDiscoveryRepository = appDiscoveryRepository,
+                                dragModifier = { app -> searchAppDragModifier(app) },
                                 onAppClick = { app ->
                                     onLaunchApp(app)
                                     onDismiss()
@@ -238,6 +245,7 @@ fun SearchOverlay(
                                 title = "Apps",
                                 apps = installedApps.distinctBy { it.packageName }.take(4),
                                 appDiscoveryRepository = appDiscoveryRepository,
+                                dragModifier = { app -> searchAppDragModifier(app) },
                                 onAppClick = { app ->
                                     onLaunchApp(app)
                                     onDismiss()
@@ -284,6 +292,7 @@ fun SearchOverlay(
                                 shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .then(searchAppDragModifier(app))
                                     .clickable {
                                         onLaunchApp(app)
                                         onDismiss()
@@ -461,7 +470,8 @@ private fun ZeroQueryAppRowSection(
     title: String,
     apps: List<AppInfo>,
     appDiscoveryRepository: AppDiscoveryRepository,
-    onAppClick: (AppInfo) -> Unit
+    onAppClick: (AppInfo) -> Unit,
+    dragModifier: @Composable (AppInfo) -> Modifier
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -492,6 +502,7 @@ private fun ZeroQueryAppRowSection(
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier
+                                    .then(dragModifier(app))
                                     .clickable { onAppClick(app) }
                                     .padding(horizontal = 4.dp, vertical = 4.dp)
                             ) {
@@ -537,4 +548,13 @@ private fun SearchSectionHeader(title: String) {
         )
         HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
     }
+}
+
+@Composable
+private fun searchAppDragModifier(app: AppInfo): Modifier {
+    val sizePx = with(LocalDensity.current) { 56.dp.toPx() }
+    return Modifier.launcherDragSource(
+        key = "search:${app.packageName}:${app.activityName}", origin = DragOrigin.SEARCH,
+        createState = { finger -> appDragState(app, DragOrigin.SEARCH, finger, sizePx) }
+    )
 }

@@ -2,7 +2,7 @@ package com.myenvironment.launcher.ui.allapps
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,7 +37,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +48,9 @@ import androidx.compose.ui.unit.sp
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
 import com.myenvironment.launcher.core.model.AppInfo
 import com.myenvironment.launcher.core.model.ItemType
+import com.myenvironment.launcher.ui.components.launcherDragSource
+import com.myenvironment.launcher.ui.components.appDragState
+import com.myenvironment.launcher.ui.home.DragOrigin
 import com.myenvironment.launcher.ui.components.LauncherItemGraphic
 
 /**
@@ -76,6 +82,7 @@ fun AllAppsTinyPage(
     var selectedAppForDialog by remember { mutableStateOf<AppInfo?>(null) }
 
     val effectiveColumns = columns.coerceAtLeast(4)
+    val dragSizePx = with(LocalDensity.current) { 56.dp.toPx() }
 
     Box(
         modifier = modifier
@@ -199,10 +206,14 @@ fun AllAppsTinyPage(
                         iconSize = iconSizeDp.dp,
                         showLabel = showLabels,
                         modifier = Modifier
-                            .combinedClickable(
-                                onClick = { onLaunchApp(app) },
-                                onLongClick = { selectedAppForDialog = app }
+                            .launcherDragSource(
+                                key = "allapps:${app.packageName}:${app.activityName}:${app.userSerialNumber}",
+                                origin = DragOrigin.ALL_APPS,
+                                onLongPressRelease = { selectedAppForDialog = app },
+                                createState = { finger -> appDragState(app, DragOrigin.ALL_APPS, finger, dragSizePx) }
                             )
+                            .semantics { onLongClick("アプリのメニュー") { selectedAppForDialog = app; true } }
+                            .clickable { onLaunchApp(app) }
                             .padding(vertical = 2.dp)
                     )
                 }
