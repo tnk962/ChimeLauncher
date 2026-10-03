@@ -1513,6 +1513,10 @@ class LauncherViewModel(
         }
     }
 
+    fun setSearchIndexEdgeDistanceDp(distanceDp: Int) {
+        viewModelScope.launch { settingsRepository.setSearchIndexEdgeDistanceDp(distanceDp) }
+    }
+
     fun setSwipeDownNotificationEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setSwipeDownNotificationEnabled(enabled)

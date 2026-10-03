@@ -34,6 +34,8 @@ interface SettingsRepository {
         showLabels: Boolean
     )
 
+    suspend fun setSearchIndexEdgeDistanceDp(distanceDp: Int)
+
     suspend fun setSwipeDownNotificationEnabled(enabled: Boolean)
 
     suspend fun setDiscoverMode(mode: DiscoverMode)

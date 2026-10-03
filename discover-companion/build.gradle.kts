@@ -10,8 +10,8 @@ android {
         applicationId = "com.myenvironment.chimediscoverbridge"
         minSdk = 29
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.3.5"
+        versionCode = 10
+        versionName = "1.3.6"
     }
     signingConfigs {
         getByName("debug") {

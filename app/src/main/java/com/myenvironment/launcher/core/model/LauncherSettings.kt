@@ -141,6 +141,7 @@ data class LauncherSettings(
     val tinyIconsColumnsExpanded: Int = 10,
     val tinyIconsSizeDp: Int = 36,
     val tinyIconsShowLabels: Boolean = false,
+    val searchIndexEdgeDistanceDp: Int = 32,
     val swipeDownNotificationEnabled: Boolean = true,
     val discoverMode: DiscoverMode = DiscoverMode.NATIVE_BRIDGE,
     val expandedPageLayoutMode: ExpandedPageLayoutMode = ExpandedPageLayoutMode.DUAL_PAGE,

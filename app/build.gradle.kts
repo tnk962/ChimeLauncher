@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 26
-        versionName = "1.3.5"
+        versionCode = 34
+        versionName = "1.3.6"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-04\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"HOMEで戻る操作をしても画面を維持。Google Discoverと独自フィードを個別のトグルで表示ON/OFF。Google Appの自動起動設定を廃止。設定変更時もページとスクロール位置を保持します。\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"更新確認時の表示位置を維持。検索候補と全アプリの縦一覧を表示。索引を検索欄の右端に揃え、「すべてのアプリ」の見出しの高さに索引のAを揃えます。キーボードを閉じても文字サイズと配置を維持します。なぞった文字を拡大表示し、索引に触れた瞬間や一覧のスクロール開始時にキーボードを閉じます。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

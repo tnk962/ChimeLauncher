@@ -1,8 +1,20 @@
 package com.myenvironment.launcher.ui.search
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.background
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,10 +25,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -39,6 +53,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
 import com.myenvironment.launcher.core.model.AppInfo
 import com.myenvironment.launcher.core.model.ItemType
@@ -59,11 +78,15 @@ import com.myenvironment.launcher.core.model.LauncherAction
 import com.myenvironment.launcher.core.model.LayoutItem
 import com.myenvironment.launcher.core.search.AppUsageMetric
 import com.myenvironment.launcher.core.search.SearchEngine
+import com.myenvironment.launcher.core.search.AppIndexLayout
+import com.myenvironment.launcher.core.search.AppListIndex
 import com.myenvironment.launcher.ui.components.appDragState
 import com.myenvironment.launcher.ui.components.launcherDragSource
 import com.myenvironment.launcher.ui.home.DragOrigin
 import com.myenvironment.launcher.ui.components.LauncherItemGraphic
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 /**
  * Swipe Up Search オーバーレイ画面 (仕様 8, 9, Chime Launcher 仕様 21〜27)
@@ -72,7 +95,7 @@ import kotlinx.coroutines.delay
  *   - `Recently Used`
  *   - `Frequently Used`
  *   - `Recently Installed`
- *   を 4件 × 最大3セクションのグリッド形式で表示する（該当データがないセクションは非表示）。
+ *   をコンパクトな候補として表示し、その下に索引付きの全アプリ縦一覧を表示する。
  * - 検索文字入力後 (`query.isNotBlank()`):
  *   - ゼロクエリ候補と検索結果を混在させず、通常のアプリ検索結果へ即座に切り替える。
  */
@@ -92,6 +115,11 @@ fun SearchOverlay(
     onDismiss: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    var fieldRightPx by remember { mutableStateOf<Float?>(null) }
+    var contentRightPx by remember { mutableStateOf<Float?>(null) }
+    var contentTopPx by remember { mutableStateOf(0f) }
+    var initialHeadingCenterPx by remember { mutableStateOf<Float?>(null) }
+    var currentHeadingCenterPx by remember { mutableStateOf<Float?>(null) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -105,6 +133,18 @@ fun SearchOverlay(
     }
 
     val isZeroQuery = query.trim().isEmpty()
+    val listState = rememberLazyListState()
+    var indexJumpJob by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
+    val indexedApps = remember(installedApps) { AppListIndex.sorted(installedApps) }
+    LaunchedEffect(listState, keyboardController) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) keyboardController?.hide()
+        }
+    }
+
+
+    LaunchedEffect(query) { listState.scrollToItem(0) }
 
     // 検索開始直後に TextField へ Focus & ソフトキーボード表示 (仕様 8.1)
     LaunchedEffect(Unit) {
@@ -168,6 +208,7 @@ fun SearchOverlay(
                     modifier = Modifier
                         .weight(1f)
                         .focusRequester(focusRequester)
+                        .onGloballyPositioned { fieldRightPx = it.boundsInRoot().right }
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -184,94 +225,104 @@ fun SearchOverlay(
             Spacer(modifier = Modifier.height(12.dp))
 
             if (isZeroQuery) {
-                // --- Zero Query State: Recently Used / Frequently Used / Recently Installed (仕様 21〜25) ---
                 val zeroSections = searchResults.zeroQuerySections
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = 28.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    if (zeroSections.recentlyUsed.isNotEmpty()) {
-                        item(key = "zero_recently_used") {
-                            ZeroQueryAppRowSection(
-                                title = "Recently Used",
-                                apps = zeroSections.recentlyUsed,
-                                appDiscoveryRepository = appDiscoveryRepository,
-                                dragModifier = { app -> searchAppDragModifier(app) },
-                                onAppClick = { app ->
-                                    onLaunchApp(app)
-                                    onDismiss()
-                                }
-                            )
+                val suggestions = listOf(
+                    "最近使ったアプリ" to zeroSections.recentlyUsed,
+                    "よく使うアプリ" to zeroSections.frequentlyUsed,
+                    "最近インストールしたアプリ" to zeroSections.recentlyInstalled
+                ).filter { it.second.isNotEmpty() }
+                val positions = remember(indexedApps, suggestions.size) {
+                    AppListIndex.positions(indexedApps, suggestions.size + 1)
+                }
+                BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()
+                    .onGloballyPositioned {
+                        contentRightPx = it.boundsInRoot().right
+                        contentTopPx = it.boundsInRoot().top
+                    }) {
+                    val density = LocalDensity.current
+                    val trailingGap = with(density) {
+                        ((contentRightPx ?: 0f) - (fieldRightPx ?: 0f)).coerceAtLeast(0f).toDp()
+                    }
+                    val imeBottom = WindowInsets.ime.getBottom(density)
+                    var initialGeometry by remember(maxWidth) { mutableStateOf<AppIndexLayout.Geometry?>(null) }
+                    LaunchedEffect(maxHeight, imeBottom, currentHeadingCenterPx) {
+                        if (initialGeometry == null || initialHeadingCenterPx == null) {
+                            // Wait for the initial IME animation to settle, then retain this
+                            // geometry for the search session even when the keyboard closes.
+                            delay(if (imeBottom > 0) 180 else 650)
+                            if (initialGeometry == null) initialGeometry = AppIndexLayout.initialGeometry(maxHeight.value)
+                            initialHeadingCenterPx = currentHeadingCenterPx
                         }
                     }
-
-                    if (zeroSections.frequentlyUsed.isNotEmpty()) {
-                        item(key = "zero_frequently_used") {
-                            ZeroQueryAppRowSection(
-                                title = "Frequently Used",
-                                apps = zeroSections.frequentlyUsed,
-                                appDiscoveryRepository = appDiscoveryRepository,
-                                dragModifier = { app -> searchAppDragModifier(app) },
-                                onAppClick = { app ->
-                                    onLaunchApp(app)
-                                    onDismiss()
-                                }
-                            )
-                        }
+                    val sizing = initialGeometry ?: AppIndexLayout.initialGeometry(maxHeight.value)
+                    val headingOffsetDp = (initialHeadingCenterPx ?: currentHeadingCenterPx)?.let { center ->
+                        with(density) { (center - contentTopPx).toDp().value }
                     }
-
-                    if (zeroSections.recentlyInstalled.isNotEmpty()) {
-                        item(key = "zero_recently_installed") {
-                            ZeroQueryAppRowSection(
-                                title = "Recently Installed",
-                                apps = zeroSections.recentlyInstalled,
-                                appDiscoveryRepository = appDiscoveryRepository,
-                                dragModifier = { app -> searchAppDragModifier(app) },
-                                onAppClick = { app ->
-                                    onLaunchApp(app)
-                                    onDismiss()
+                    val geometry = sizing.copy(topDp = headingOffsetDp?.let {
+                        AppIndexLayout.anchorTopDp(it, sizing.heightDp, AppListIndex.labels.size)
+                    } ?: sizing.topDp)
+                    Row(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(bottom = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            suggestions.forEach { (title, apps) ->
+                                item(key = "suggestion_$title") {
+                                    ZeroQueryAppRowSection(title, apps, appDiscoveryRepository,
+                                        { onLaunchApp(it); onDismiss() }, { searchAppDragModifier(it) })
                                 }
-                            )
-                        }
-                    }
-
-                    // まだどのセクションも空の場合（初回起動直後など）は先頭4件を控えめに表示
-                    if (zeroSections.isEmpty && installedApps.isNotEmpty()) {
-                        item(key = "zero_fallback_apps") {
-                            ZeroQueryAppRowSection(
-                                title = "Apps",
-                                apps = installedApps.distinctBy { it.packageName }.take(4),
-                                appDiscoveryRepository = appDiscoveryRepository,
-                                dragModifier = { app -> searchAppDragModifier(app) },
-                                onAppClick = { app ->
-                                    onLaunchApp(app)
-                                    onDismiss()
+                            }
+                            item(key = "all_apps_title") {
+                                SearchSectionHeader("すべてのアプリ (${indexedApps.size})",
+                                    textModifier = Modifier.onGloballyPositioned {
+                                        if (initialHeadingCenterPx == null) {
+                                            currentHeadingCenterPx = it.boundsInRoot().center.y
+                                        }
+                                    })
+                            }
+                            indexedApps.groupBy { AppListIndex.section(it.label) }.forEach { (section, apps) ->
+                                item(key = "index_$section") {
+                                    SearchSectionHeader(if (section == "#") "その他" else section)
                                 }
-                            )
-                        }
-                    }
-
-                    if (!hasUsageAccessPermission) {
-                        item(key = "zero_usage_permission_hint") {
-                            TextButton(
-                                onClick = onRequestUsageAccess,
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "端末全体の利用履歴も反映する (使用状況へのアクセス設定)",
-                                    color = Color(0xFF9AA0A6),
-                                    fontSize = 11.sp
-                                )
+                                items(apps, key = { "all_${it.componentKey}:${it.userSerialNumber}" }) { app ->
+                                    SearchAppRow(app, appDiscoveryRepository) {
+                                        onLaunchApp(app); onDismiss()
+                                    }
+                                }
+                            }
+                            if (!hasUsageAccessPermission) {
+                                item(key = "zero_usage_permission_hint") {
+                                    TextButton(onClick = onRequestUsageAccess,
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)) {
+                                        Text("端末全体の利用履歴も反映する (使用状況へのアクセス設定)",
+                                            color = Color(0xFF9AA0A6), fontSize = 11.sp)
+                                    }
+                                }
                             }
                         }
+                        CompactAppIndex(
+                            positions = positions,
+                            trailingGap = trailingGap,
+                            geometry = geometry,
+                            onSelect = { target ->
+                                indexJumpJob?.cancel()
+                                indexJumpJob = scope.launch { listState.scrollToItem(target) }
+                            },
+                            onTouchStart = {
+                                // Retain the current rail before IME dismissal changes constraints.
+                                if (initialGeometry == null) initialGeometry = sizing
+                                if (initialHeadingCenterPx == null) initialHeadingCenterPx = currentHeadingCenterPx
+                                keyboardController?.hide()
+                            }
+                        )
                     }
                 }
             } else {
                 // --- 検索文字入力後: 通常のアプリ検索結果を最優先表示 (ゼロクエリ候補と混在させない: 仕様 26, 27) ---
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
@@ -287,47 +338,9 @@ fun SearchOverlay(
                             items = searchResults.matchingApps,
                             key = { "app_${it.packageName}_${it.activityName}" }
                         ) { app ->
-                            Surface(
-                                color = Color(0xFF1C2028),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(searchAppDragModifier(app))
-                                    .clickable {
-                                        onLaunchApp(app)
-                                        onDismiss()
-                                    }
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                                ) {
-                                    LauncherItemGraphic(
-                                        type = ItemType.APP,
-                                        packageName = app.packageName,
-                                        activityName = app.activityName,
-                                        targetUri = "",
-                                        label = app.label,
-                                        isInstalled = true,
-                                        appDiscoveryRepository = appDiscoveryRepository,
-                                        iconSize = 36.dp,
-                                        showLabel = false
-                                    )
-                                    Spacer(modifier = Modifier.width(14.dp))
-                                    Column {
-                                        Text(
-                                            text = app.label,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Medium,
-                                            fontSize = 15.sp
-                                        )
-                                        Text(
-                                            text = app.packageName,
-                                            color = Color(0xFF9AA0A6),
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
+                            SearchAppRow(app, appDiscoveryRepository) {
+                                onLaunchApp(app)
+                                onDismiss()
                             }
                         }
                     }
@@ -462,9 +475,29 @@ fun SearchOverlay(
     }
 }
 
-/**
- * Zero Query State の 1 セクション（[ app ][ app ][ app ][ app ] 横4列レイアウト: 仕様 25）
- */
+@Composable
+private fun SearchAppRow(app: AppInfo, repository: AppDiscoveryRepository, onClick: () -> Unit) {
+    Surface(
+        color = Color(0xFF1C2028), shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().then(searchAppDragModifier(app)).clickable(onClick = onClick)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            LauncherItemGraphic(type = ItemType.APP, packageName = app.packageName,
+                activityName = app.activityName, targetUri = "", label = app.label,
+                isInstalled = true, appDiscoveryRepository = repository,
+                iconSize = 32.dp, showLabel = false)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(app.label, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.packageName, color = Color(0xFF9AA0A6), fontSize = 10.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
 @Composable
 private fun ZeroQueryAppRowSection(
     title: String,
@@ -473,63 +506,22 @@ private fun ZeroQueryAppRowSection(
     onAppClick: (AppInfo) -> Unit,
     dragModifier: @Composable (AppInfo) -> Modifier
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        SearchSectionHeader(title)
-
-        Surface(
-            color = Color(0xFF1A1E26),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.Top
-            ) {
-                val displayApps = apps.take(4)
-                for (i in 0 until 4) {
-                    val app = displayApps.getOrNull(i)
-                    Box(
-                        contentAlignment = Alignment.TopCenter,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (app != null) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .then(dragModifier(app))
-                                    .clickable { onAppClick(app) }
-                                    .padding(horizontal = 4.dp, vertical = 4.dp)
-                            ) {
-                                LauncherItemGraphic(
-                                    type = ItemType.APP,
-                                    packageName = app.packageName,
-                                    activityName = app.activityName,
-                                    targetUri = "",
-                                    label = app.label,
-                                    isInstalled = true,
-                                    appDiscoveryRepository = appDiscoveryRepository,
-                                    iconSize = 44.dp,
-                                    showLabel = false
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = app.label,
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            apps.take(4).forEach { app ->
+                Row(
+                    modifier = Modifier.weight(1f).then(dragModifier(app))
+                        .clickable { onAppClick(app) }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LauncherItemGraphic(type = ItemType.APP, packageName = app.packageName,
+                        activityName = app.activityName, targetUri = "", label = app.label,
+                        isInstalled = true, appDiscoveryRepository = appDiscoveryRepository,
+                        iconSize = 26.dp, showLabel = false)
+                    Spacer(Modifier.width(4.dp))
+                    Text(app.label, color = Color.White, fontSize = 10.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -537,14 +529,14 @@ private fun ZeroQueryAppRowSection(
 }
 
 @Composable
-private fun SearchSectionHeader(title: String) {
+private fun SearchSectionHeader(title: String, textModifier: Modifier = Modifier) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = title,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
-            modifier = Modifier.padding(vertical = 4.dp)
+            modifier = Modifier.padding(vertical = 4.dp).then(textModifier)
         )
         HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
     }
@@ -557,4 +549,84 @@ private fun searchAppDragModifier(app: AppInfo): Modifier {
         key = "search:${app.packageName}:${app.activityName}", origin = DragOrigin.SEARCH,
         createState = { finger -> appDragState(app, DragOrigin.SEARCH, finger, sizePx) }
     )
+}
+
+/** Keep the index clear of edge gestures and let a single finger scrub tiny sections. */
+@Composable
+private fun CompactAppIndex(
+    positions: Map<String, Int>,
+    trailingGap: androidx.compose.ui.unit.Dp,
+    geometry: AppIndexLayout.Geometry,
+    onSelect: (Int) -> Unit,
+    onTouchStart: () -> Unit
+) {
+    var selected by remember { mutableStateOf<String?>(null) }
+    val labels = AppListIndex.labels
+    val labelStarts = remember { FloatArray(labels.size) }
+    val density = LocalDensity.current
+    Box(Modifier.width(28.dp + trailingGap).fillMaxHeight()) {
+        val railHeight = geometry.heightDp.dp
+        val top = geometry.topDp.dp
+        val labelSize = (railHeight.value / labels.size * 0.82f / density.fontScale).sp
+        Column(
+            Modifier.offset(y = top).width(28.dp).height(railHeight)
+                .pointerInput(positions, railHeight) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        down.consume()
+                        onTouchStart()
+                        fun select(y: Float) {
+                            val index = AppIndexLayout.labelIndex(y, labelStarts)
+                            val label = labels[index]
+                            if (selected != label) {
+                                selected = label
+                                positions[label]?.let(onSelect)
+                            }
+                        }
+                        select(down.position.y)
+                        try {
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                change.consume()
+                                if (!change.pressed) break
+                                select(change.position.y)
+                            }
+                        } finally {
+                            selected = null
+                        }
+                    }
+                },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            labels.forEachIndexed { index, label ->
+                Box(Modifier.fillMaxWidth().weight(1f)
+                    .onGloballyPositioned { labelStarts[index] = it.positionInParent().y }
+                    .semantics {
+                    positions[label]?.let { target ->
+                        onClick(label = "$label へ移動") {
+                            onTouchStart()
+                            onSelect(target)
+                            true
+                        }
+                    }
+                }, contentAlignment = Alignment.Center) {
+                    Text(label, fontSize = labelSize, lineHeight = labelSize,
+                        color = if (selected == label || positions[label] != null)
+                            MaterialTheme.colorScheme.primary else Color(0xFF626773),
+                        textAlign = TextAlign.Center, maxLines = 1)
+                }
+            }
+        }
+        selected?.let { label ->
+            val sectionOffset = railHeight * ((labels.indexOf(label) + 0.5f) / labels.size)
+            Box(
+                Modifier.offset(x = (-62).dp, y = top + sectionOffset - 28.dp)
+                    .requiredSize(56.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(28.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(label, color = MaterialTheme.colorScheme.onPrimary, fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
