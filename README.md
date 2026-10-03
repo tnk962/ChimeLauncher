@@ -155,4 +155,3 @@ All Appsの「左側半分だけに表示」の切替は廃止し、以前その
 - [v1.3.4の画像付き操作マニュアル](docs/20261003_chimelauncher-user-manual.md)
 - [v1.3.4の操作マニュアルPDF](output/pdf/20261003_chimelauncher-user-manual.pdf)
 - [v1.3.4のMarkdown・画像一式（ZIP）](output/pdf/20261003_chimelauncher-manual-source.zip)
-
