@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -52,6 +54,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +66,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.collect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -129,6 +141,37 @@ fun SettingsScreen(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    var contentHeight by remember { mutableIntStateOf(0) }
+    var reservedContentHeight by remember { mutableIntStateOf(0) }
+    var checkButtonY by remember { mutableStateOf<Int?>(null) }
+    var checkAnchorY by remember { mutableStateOf<Int?>(null) }
+    val checkKeepingPosition = {
+        reservedContentHeight = maxOf(reservedContentHeight, contentHeight)
+        checkAnchorY = checkButtonY
+        onCheckForUpdate()
+    }
+    // Keep the user's pressed button at the same window coordinate even when a banner
+    // above it changes. Retain the pre-check extent so a temporary shrink cannot clamp scroll.
+    LaunchedEffect(scrollState) {
+        snapshotFlow { Triple(checkAnchorY, checkButtonY, scrollState.maxValue) }
+            .collect { (anchor, current, _) ->
+                if (anchor != null && current != null && anchor != current) {
+                    scrollState.scrollTo((scrollState.value + current - anchor).coerceIn(0, scrollState.maxValue))
+                }
+            }
+    }
+    LaunchedEffect(scrollState) {
+        scrollState.interactionSource.interactions.collect {
+            if (it is DragInteraction.Start) checkAnchorY = null
+        }
+    }
+    LaunchedEffect(updateState) {
+        if (updateState !is AppUpdateState.Checking && checkAnchorY != null) {
+            repeat(3) { withFrameNanos { } }
+            checkAnchorY = null
+        }
+    }
     val isAccessibilityEnabled = remember(settings) {
         NotificationShadeService.isServiceEnabled(context)
     }
@@ -169,6 +212,11 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
+                .heightIn(min = with(density) { reservedContentHeight.toDp() })
+                .onSizeChanged {
+                    contentHeight = it.height
+                    if (checkAnchorY != null) reservedContentHeight = maxOf(reservedContentHeight, it.height)
+                }
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -987,11 +1035,14 @@ fun SettingsScreen(
 
                     AppUpdateControlSection(
                         updateState = updateState,
-                        onCheckForUpdate = onCheckForUpdate,
+                        onCheckForUpdate = checkKeepingPosition,
                         onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
                         onInstallDownloadedApk = onInstallDownloadedApk,
                         onOpenUnknownSourcesSettings = onOpenUnknownSourcesSettings,
                         onOpenGitHubReleases = onOpenGitHubReleases,
+                        checkButtonModifier = Modifier.onGloballyPositioned {
+                            checkButtonY = it.boundsInRoot().top.roundToInt()
+                        },
                         showCheckButton = true
                     )
 
@@ -1043,7 +1094,8 @@ private fun AppUpdateControlSection(
     onInstallDownloadedApk: (String) -> Unit,
     onOpenUnknownSourcesSettings: () -> Unit,
     onOpenGitHubReleases: (String) -> Unit,
-    showCheckButton: Boolean
+    showCheckButton: Boolean,
+    checkButtonModifier: Modifier = Modifier
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (updateState) {
@@ -1221,7 +1273,7 @@ private fun AppUpdateControlSection(
         if (showCheckButton) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().then(checkButtonModifier)
             ) {
                 FilledTonalButton(
                     onClick = onCheckForUpdate,

@@ -1,6 +1,13 @@
 package com.myenvironment.launcher.ui.search
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +24,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -39,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,11 +68,14 @@ import com.myenvironment.launcher.core.model.LauncherAction
 import com.myenvironment.launcher.core.model.LayoutItem
 import com.myenvironment.launcher.core.search.AppUsageMetric
 import com.myenvironment.launcher.core.search.SearchEngine
+import com.myenvironment.launcher.core.search.AppListIndex
 import com.myenvironment.launcher.ui.components.appDragState
 import com.myenvironment.launcher.ui.components.launcherDragSource
 import com.myenvironment.launcher.ui.home.DragOrigin
 import com.myenvironment.launcher.ui.components.LauncherItemGraphic
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 /**
  * Swipe Up Search オーバーレイ画面 (仕様 8, 9, Chime Launcher 仕様 21〜27)
@@ -72,7 +84,7 @@ import kotlinx.coroutines.delay
  *   - `Recently Used`
  *   - `Frequently Used`
  *   - `Recently Installed`
- *   を 4件 × 最大3セクションのグリッド形式で表示する（該当データがないセクションは非表示）。
+ *   をコンパクトな候補として表示し、その下に索引付きの全アプリ縦一覧を表示する。
  * - 検索文字入力後 (`query.isNotBlank()`):
  *   - ゼロクエリ候補と検索結果を混在させず、通常のアプリ検索結果へ即座に切り替える。
  */
@@ -105,6 +117,18 @@ fun SearchOverlay(
     }
 
     val isZeroQuery = query.trim().isEmpty()
+    val listState = rememberLazyListState()
+    val indexScrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val indexedApps = remember(installedApps) { AppListIndex.sorted(installedApps) }
+    LaunchedEffect(listState, keyboardController) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) keyboardController?.hide()
+        }
+    }
+
+
+    LaunchedEffect(query) { listState.scrollToItem(0) }
 
     // 検索開始直後に TextField へ Focus & ソフトキーボード表示 (仕様 8.1)
     LaunchedEffect(Unit) {
@@ -184,94 +208,84 @@ fun SearchOverlay(
             Spacer(modifier = Modifier.height(12.dp))
 
             if (isZeroQuery) {
-                // --- Zero Query State: Recently Used / Frequently Used / Recently Installed (仕様 21〜25) ---
                 val zeroSections = searchResults.zeroQuerySections
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = 28.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    if (zeroSections.recentlyUsed.isNotEmpty()) {
-                        item(key = "zero_recently_used") {
-                            ZeroQueryAppRowSection(
-                                title = "Recently Used",
-                                apps = zeroSections.recentlyUsed,
-                                appDiscoveryRepository = appDiscoveryRepository,
-                                dragModifier = { app -> searchAppDragModifier(app) },
-                                onAppClick = { app ->
-                                    onLaunchApp(app)
-                                    onDismiss()
-                                }
-                            )
-                        }
-                    }
-
-                    if (zeroSections.frequentlyUsed.isNotEmpty()) {
-                        item(key = "zero_frequently_used") {
-                            ZeroQueryAppRowSection(
-                                title = "Frequently Used",
-                                apps = zeroSections.frequentlyUsed,
-                                appDiscoveryRepository = appDiscoveryRepository,
-                                dragModifier = { app -> searchAppDragModifier(app) },
-                                onAppClick = { app ->
-                                    onLaunchApp(app)
-                                    onDismiss()
-                                }
-                            )
-                        }
-                    }
-
-                    if (zeroSections.recentlyInstalled.isNotEmpty()) {
-                        item(key = "zero_recently_installed") {
-                            ZeroQueryAppRowSection(
-                                title = "Recently Installed",
-                                apps = zeroSections.recentlyInstalled,
-                                appDiscoveryRepository = appDiscoveryRepository,
-                                dragModifier = { app -> searchAppDragModifier(app) },
-                                onAppClick = { app ->
-                                    onLaunchApp(app)
-                                    onDismiss()
-                                }
-                            )
-                        }
-                    }
-
-                    // まだどのセクションも空の場合（初回起動直後など）は先頭4件を控えめに表示
-                    if (zeroSections.isEmpty && installedApps.isNotEmpty()) {
-                        item(key = "zero_fallback_apps") {
-                            ZeroQueryAppRowSection(
-                                title = "Apps",
-                                apps = installedApps.distinctBy { it.packageName }.take(4),
-                                appDiscoveryRepository = appDiscoveryRepository,
-                                dragModifier = { app -> searchAppDragModifier(app) },
-                                onAppClick = { app ->
-                                    onLaunchApp(app)
-                                    onDismiss()
-                                }
-                            )
-                        }
-                    }
-
-                    if (!hasUsageAccessPermission) {
-                        item(key = "zero_usage_permission_hint") {
-                            TextButton(
-                                onClick = onRequestUsageAccess,
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "端末全体の利用履歴も反映する (使用状況へのアクセス設定)",
-                                    color = Color(0xFF9AA0A6),
-                                    fontSize = 11.sp
-                                )
+                val suggestions = listOf(
+                    "最近使ったアプリ" to zeroSections.recentlyUsed,
+                    "よく使うアプリ" to zeroSections.frequentlyUsed,
+                    "最近インストールしたアプリ" to zeroSections.recentlyInstalled
+                ).filter { it.second.isNotEmpty() }
+                val positions = remember(indexedApps, suggestions.size) {
+                    AppListIndex.positions(indexedApps, suggestions.size + 1)
+                }
+                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        suggestions.forEach { (title, apps) ->
+                            item(key = "suggestion_$title") {
+                                ZeroQueryAppRowSection(title, apps, appDiscoveryRepository,
+                                    { onLaunchApp(it); onDismiss() }, { searchAppDragModifier(it) })
                             }
+                        }
+                        item(key = "all_apps_title") {
+                            SearchSectionHeader("すべてのアプリ (${indexedApps.size})")
+                        }
+                        indexedApps.groupBy { AppListIndex.section(it.label) }.forEach { (section, apps) ->
+                            item(key = "index_$section") {
+                                SearchSectionHeader(if (section == "#") "その他" else section)
+                            }
+                            items(apps, key = { "all_${it.componentKey}:${it.userSerialNumber}" }) { app ->
+                                SearchAppRow(app, appDiscoveryRepository) {
+                                    onLaunchApp(app); onDismiss()
+                                }
+                            }
+                        }
+                        if (!hasUsageAccessPermission) {
+                            item(key = "zero_usage_permission_hint") {
+                                TextButton(onClick = onRequestUsageAccess,
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)) {
+                                    Text("端末全体の利用履歴も反映する (使用状況へのアクセス設定)",
+                                        color = Color(0xFF9AA0A6), fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                    Column(
+                        modifier = Modifier.width(30.dp).verticalScroll(indexScrollState),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        AppListIndex.labels.forEach { label ->
+                            val target = positions[label]
+                            Text(label, fontSize = 11.sp,
+                                color = if (target != null) MaterialTheme.colorScheme.primary else Color(0xFF626773),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().height(20.dp)
+                                    .semantics {
+                                        if (target != null) onClick(label = "$label へ移動") {
+                                            keyboardController?.hide()
+                                            scope.launch { listState.scrollToItem(target) }
+                                            true
+                                        }
+                                    }
+                                    .pointerInput(target) {
+                                        detectTapGestures {
+                                            if (target != null) {
+                                                keyboardController?.hide()
+                                                scope.launch { listState.scrollToItem(target) }
+                                            }
+                                        }
+                                    }
+                            )
                         }
                     }
                 }
             } else {
                 // --- 検索文字入力後: 通常のアプリ検索結果を最優先表示 (ゼロクエリ候補と混在させない: 仕様 26, 27) ---
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
@@ -287,47 +301,9 @@ fun SearchOverlay(
                             items = searchResults.matchingApps,
                             key = { "app_${it.packageName}_${it.activityName}" }
                         ) { app ->
-                            Surface(
-                                color = Color(0xFF1C2028),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(searchAppDragModifier(app))
-                                    .clickable {
-                                        onLaunchApp(app)
-                                        onDismiss()
-                                    }
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                                ) {
-                                    LauncherItemGraphic(
-                                        type = ItemType.APP,
-                                        packageName = app.packageName,
-                                        activityName = app.activityName,
-                                        targetUri = "",
-                                        label = app.label,
-                                        isInstalled = true,
-                                        appDiscoveryRepository = appDiscoveryRepository,
-                                        iconSize = 36.dp,
-                                        showLabel = false
-                                    )
-                                    Spacer(modifier = Modifier.width(14.dp))
-                                    Column {
-                                        Text(
-                                            text = app.label,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Medium,
-                                            fontSize = 15.sp
-                                        )
-                                        Text(
-                                            text = app.packageName,
-                                            color = Color(0xFF9AA0A6),
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
+                            SearchAppRow(app, appDiscoveryRepository) {
+                                onLaunchApp(app)
+                                onDismiss()
                             }
                         }
                     }
@@ -462,9 +438,29 @@ fun SearchOverlay(
     }
 }
 
-/**
- * Zero Query State の 1 セクション（[ app ][ app ][ app ][ app ] 横4列レイアウト: 仕様 25）
- */
+@Composable
+private fun SearchAppRow(app: AppInfo, repository: AppDiscoveryRepository, onClick: () -> Unit) {
+    Surface(
+        color = Color(0xFF1C2028), shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().then(searchAppDragModifier(app)).clickable(onClick = onClick)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            LauncherItemGraphic(type = ItemType.APP, packageName = app.packageName,
+                activityName = app.activityName, targetUri = "", label = app.label,
+                isInstalled = true, appDiscoveryRepository = repository,
+                iconSize = 32.dp, showLabel = false)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(app.label, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.packageName, color = Color(0xFF9AA0A6), fontSize = 10.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
 @Composable
 private fun ZeroQueryAppRowSection(
     title: String,
@@ -473,63 +469,22 @@ private fun ZeroQueryAppRowSection(
     onAppClick: (AppInfo) -> Unit,
     dragModifier: @Composable (AppInfo) -> Modifier
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        SearchSectionHeader(title)
-
-        Surface(
-            color = Color(0xFF1A1E26),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.Top
-            ) {
-                val displayApps = apps.take(4)
-                for (i in 0 until 4) {
-                    val app = displayApps.getOrNull(i)
-                    Box(
-                        contentAlignment = Alignment.TopCenter,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (app != null) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .then(dragModifier(app))
-                                    .clickable { onAppClick(app) }
-                                    .padding(horizontal = 4.dp, vertical = 4.dp)
-                            ) {
-                                LauncherItemGraphic(
-                                    type = ItemType.APP,
-                                    packageName = app.packageName,
-                                    activityName = app.activityName,
-                                    targetUri = "",
-                                    label = app.label,
-                                    isInstalled = true,
-                                    appDiscoveryRepository = appDiscoveryRepository,
-                                    iconSize = 44.dp,
-                                    showLabel = false
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = app.label,
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            apps.take(4).forEach { app ->
+                Row(
+                    modifier = Modifier.weight(1f).then(dragModifier(app))
+                        .clickable { onAppClick(app) }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LauncherItemGraphic(type = ItemType.APP, packageName = app.packageName,
+                        activityName = app.activityName, targetUri = "", label = app.label,
+                        isInstalled = true, appDiscoveryRepository = appDiscoveryRepository,
+                        iconSize = 26.dp, showLabel = false)
+                    Spacer(Modifier.width(4.dp))
+                    Text(app.label, color = Color.White, fontSize = 10.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 }
             }
         }
