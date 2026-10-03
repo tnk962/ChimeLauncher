@@ -10,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
@@ -52,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +76,7 @@ import com.myenvironment.launcher.core.model.LauncherAction
 import com.myenvironment.launcher.core.model.LayoutItem
 import com.myenvironment.launcher.core.search.AppUsageMetric
 import com.myenvironment.launcher.core.search.SearchEngine
+import com.myenvironment.launcher.core.search.AppIndexLayout
 import com.myenvironment.launcher.core.search.AppListIndex
 import com.myenvironment.launcher.ui.components.appDragState
 import com.myenvironment.launcher.ui.components.launcherDragSource
@@ -99,6 +103,7 @@ fun SearchOverlay(
     configuredShortcuts: List<LayoutItem>,
     usageMap: Map<String, AppUsageMetric> = emptyMap(),
     hasUsageAccessPermission: Boolean = true,
+    searchIndexEdgeDistanceDp: Int = 32,
     searchEngine: SearchEngine,
     appDiscoveryRepository: AppDiscoveryRepository,
     onLaunchApp: (AppInfo) -> Unit,
@@ -222,50 +227,56 @@ fun SearchOverlay(
                 val positions = remember(indexedApps, suggestions.size) {
                     AppListIndex.positions(indexedApps, suggestions.size + 1)
                 }
-                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        suggestions.forEach { (title, apps) ->
-                            item(key = "suggestion_$title") {
-                                ZeroQueryAppRowSection(title, apps, appDiscoveryRepository,
-                                    { onLaunchApp(it); onDismiss() }, { searchAppDragModifier(it) })
+                BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    val density = LocalDensity.current
+                    val systemGestureDp = with(density) { WindowInsets.systemGestures.getRight(this, LocalLayoutDirection.current).toDp().value }
+                    val edgeDistance = AppIndexLayout.edgeDistanceDp(searchIndexEdgeDistanceDp, systemGestureDp, maxWidth.value).dp
+                    Row(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(bottom = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            suggestions.forEach { (title, apps) ->
+                                item(key = "suggestion_$title") {
+                                    ZeroQueryAppRowSection(title, apps, appDiscoveryRepository,
+                                        { onLaunchApp(it); onDismiss() }, { searchAppDragModifier(it) })
+                                }
                             }
-                        }
-                        item(key = "all_apps_title") {
-                            SearchSectionHeader("すべてのアプリ (${indexedApps.size})")
-                        }
-                        indexedApps.groupBy { AppListIndex.section(it.label) }.forEach { (section, apps) ->
-                            item(key = "index_$section") {
-                                SearchSectionHeader(if (section == "#") "その他" else section)
+                            item(key = "all_apps_title") {
+                                SearchSectionHeader("すべてのアプリ (${indexedApps.size})")
                             }
-                            items(apps, key = { "all_${it.componentKey}:${it.userSerialNumber}" }) { app ->
-                                SearchAppRow(app, appDiscoveryRepository) {
-                                    onLaunchApp(app); onDismiss()
+                            indexedApps.groupBy { AppListIndex.section(it.label) }.forEach { (section, apps) ->
+                                item(key = "index_$section") {
+                                    SearchSectionHeader(if (section == "#") "その他" else section)
+                                }
+                                items(apps, key = { "all_${it.componentKey}:${it.userSerialNumber}" }) { app ->
+                                    SearchAppRow(app, appDiscoveryRepository) {
+                                        onLaunchApp(app); onDismiss()
+                                    }
+                                }
+                            }
+                            if (!hasUsageAccessPermission) {
+                                item(key = "zero_usage_permission_hint") {
+                                    TextButton(onClick = onRequestUsageAccess,
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)) {
+                                        Text("端末全体の利用履歴も反映する (使用状況へのアクセス設定)",
+                                            color = Color(0xFF9AA0A6), fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }
-                        if (!hasUsageAccessPermission) {
-                            item(key = "zero_usage_permission_hint") {
-                                TextButton(onClick = onRequestUsageAccess,
-                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)) {
-                                    Text("端末全体の利用履歴も反映する (使用状況へのアクセス設定)",
-                                        color = Color(0xFF9AA0A6), fontSize = 11.sp)
-                                }
-                            }
-                        }
+                        CompactAppIndex(
+                            positions = positions,
+                            edgeDistance = edgeDistance,
+                            onSelect = { target ->
+                                indexJumpJob?.cancel()
+                                indexJumpJob = scope.launch { listState.scrollToItem(target) }
+                            },
+                            onFinish = { keyboardController?.hide() }
+                        )
                     }
-                    CompactAppIndex(
-                        positions = positions,
-                        onSelect = { target ->
-                            indexJumpJob?.cancel()
-                            indexJumpJob = scope.launch { listState.scrollToItem(target) }
-                        },
-                        onFinish = { keyboardController?.hide() }
-                    )
                 }
             } else {
                 // --- 検索文字入力後: 通常のアプリ検索結果を最優先表示 (ゼロクエリ候補と混在させない: 仕様 26, 27) ---
@@ -503,17 +514,18 @@ private fun searchAppDragModifier(app: AppInfo): Modifier {
 @Composable
 private fun CompactAppIndex(
     positions: Map<String, Int>,
+    edgeDistance: androidx.compose.ui.unit.Dp,
     onSelect: (Int) -> Unit,
     onFinish: () -> Unit
 ) {
     var selected by remember { mutableStateOf<String?>(null) }
     val labels = AppListIndex.labels
     val density = LocalDensity.current
-    BoxWithConstraints(Modifier.width(44.dp).fillMaxHeight()) {
-        // At full height this covers the former K–Z area. With the IME, keep all
-        // sections visible in the available space; defer hiding it until release.
-        val top = minOf(200.dp, maxHeight * 0.45f)
-        val railHeight = minOf(320.dp, (maxHeight - top - 8.dp).coerceAtLeast(1.dp))
+    BoxWithConstraints(Modifier.width(28.dp + (edgeDistance - 16.dp)).fillMaxHeight()) {
+        // Preserve the previous center while extending the rail by 1.5x. With the
+        // IME visible, use all available height and keep its geometry fixed until release.
+        val railHeight = AppIndexLayout.heightDp(maxHeight.value).dp
+        val top = AppIndexLayout.topDp(maxHeight.value, railHeight.value).dp
         val labelSize = (railHeight.value / labels.size * 0.82f / density.fontScale).sp
         Column(
             Modifier.offset(y = top).width(28.dp).height(railHeight)

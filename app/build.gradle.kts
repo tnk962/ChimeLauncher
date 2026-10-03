@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 28
-        versionName = "1.3.6-preview.2"
+        versionCode = 29
+        versionName = "1.3.6-preview.3"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-04\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"更新確認時の表示位置を維持。検索候補をコンパクトにし、全アプリの縦一覧と、右端から離したコンパクトな英字・かな索引を追加。索引はなぞって選べます。検索はすぐ入力でき、一覧をスクロールするとキーボードを閉じます。\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"更新確認時の表示位置を維持。検索候補をコンパクトにし、全アプリの縦一覧と、右端から離したコンパクトな英字・かな索引を追加。索引の縦幅を1.5倍に拡大し、端末の標準ジェスチャー幅に追従。右端からの距離を設定できます。なぞった文字を拡大表示します。検索はすぐ入力でき、一覧をスクロールするとキーボードを閉じます。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

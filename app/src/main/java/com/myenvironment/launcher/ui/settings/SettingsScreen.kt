@@ -119,6 +119,7 @@ fun SettingsScreen(
     onToggleReturnChime: (Boolean) -> Unit = {},
     onSelectReturnChimeInterval: (ReturnChimeInterval) -> Unit = {},
     onToggleTimeChime: (Boolean) -> Unit = {},
+    onSetSearchIndexEdgeDistanceDp: (Int) -> Unit,
     onToggleSwipeDownNotification: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenUsageAccessSettings: () -> Unit = {},
@@ -739,6 +740,23 @@ fun SettingsScreen(
                             )
                         }
                     ) { Text("サイズ +") }
+                }
+            }
+
+            SettingsSectionCard(title = "検索の索引") {
+                Text("右端からの距離: ${settings.searchIndexEdgeDistanceDp.coerceIn(32, 128)}dp",
+                    color = Color.White)
+                Text("端末の戻るジェスチャー領域には自動で合わせます。One Hand Operationなどと重なる場合は距離を増やしてください。",
+                    color = Color(0xFFBDC1C6), fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = settings.searchIndexEdgeDistanceDp > 32,
+                        onClick = { onSetSearchIndexEdgeDistanceDp(settings.searchIndexEdgeDistanceDp - 8) }) {
+                        Text("近づける −")
+                    }
+                    OutlinedButton(enabled = settings.searchIndexEdgeDistanceDp < 128,
+                        onClick = { onSetSearchIndexEdgeDistanceDp(settings.searchIndexEdgeDistanceDp + 8) }) {
+                        Text("離す ＋")
+                    }
                 }
             }
 

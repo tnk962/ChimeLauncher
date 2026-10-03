@@ -42,6 +42,7 @@ class DataStoreSettingsRepository(
         val TINY_COLS_EXPANDED = intPreferencesKey("tiny_icons_columns_expanded")
         val TINY_SIZE_DP = intPreferencesKey("tiny_icons_size_dp")
         val TINY_SHOW_LABELS = booleanPreferencesKey("tiny_icons_show_labels")
+        val SEARCH_INDEX_EDGE = intPreferencesKey("search_index_edge_distance_dp")
         val SWIPE_DOWN_NOTIFICATION = booleanPreferencesKey("swipe_down_notification_enabled")
         val DISCOVER_MODE = stringPreferencesKey("discover_mode_v2")
         val EXPANDED_LAYOUT_MODE = stringPreferencesKey("expanded_page_layout_mode")
@@ -92,6 +93,7 @@ class DataStoreSettingsRepository(
             tinyIconsColumnsExpanded = prefs[Keys.TINY_COLS_EXPANDED] ?: default.tinyIconsColumnsExpanded,
             tinyIconsSizeDp = prefs[Keys.TINY_SIZE_DP] ?: default.tinyIconsSizeDp,
             tinyIconsShowLabels = prefs[Keys.TINY_SHOW_LABELS] ?: default.tinyIconsShowLabels,
+            searchIndexEdgeDistanceDp = (prefs[Keys.SEARCH_INDEX_EDGE] ?: default.searchIndexEdgeDistanceDp).coerceIn(32, 128),
             swipeDownNotificationEnabled = prefs[Keys.SWIPE_DOWN_NOTIFICATION] ?: default.swipeDownNotificationEnabled,
             discoverMode = discoverMode,
             expandedPageLayoutMode = expandedLayoutMode,
@@ -164,6 +166,10 @@ class DataStoreSettingsRepository(
             prefs[Keys.TINY_SIZE_DP] = sizeDp.coerceIn(24, 64)
             prefs[Keys.TINY_SHOW_LABELS] = showLabels
         }
+    }
+
+    override suspend fun setSearchIndexEdgeDistanceDp(distanceDp: Int) {
+        appContext.launcherDataStore.edit { it[Keys.SEARCH_INDEX_EDGE] = distanceDp.coerceIn(32, 128) }
     }
 
     override suspend fun setSwipeDownNotificationEnabled(enabled: Boolean) {
@@ -251,6 +257,7 @@ class DataStoreSettingsRepository(
             prefs[Keys.TINY_COLS_EXPANDED] = newSettings.tinyIconsColumnsExpanded
             prefs[Keys.TINY_SIZE_DP] = newSettings.tinyIconsSizeDp
             prefs[Keys.TINY_SHOW_LABELS] = newSettings.tinyIconsShowLabels
+            prefs[Keys.SEARCH_INDEX_EDGE] = newSettings.searchIndexEdgeDistanceDp.coerceIn(32, 128)
             prefs[Keys.SWIPE_DOWN_NOTIFICATION] = newSettings.swipeDownNotificationEnabled
             prefs[Keys.DISCOVER_MODE] = newSettings.discoverMode.normalized.name
             prefs[Keys.EXPANDED_LAYOUT_MODE] = newSettings.expandedPageLayoutMode.name
