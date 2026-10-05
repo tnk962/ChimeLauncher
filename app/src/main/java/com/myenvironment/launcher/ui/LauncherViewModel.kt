@@ -313,6 +313,21 @@ class LauncherViewModel(
         overlayState.update { it.copy(activeChimeEvent = null) }
     }
 
+    private val discoverReturn = DiscoverReturn()
+
+    fun openDiscoverArticle(url: String) {
+        if (feedBridge.openArticleUrl(url)) discoverReturn.remember(DiscoverReturnTarget.CUSTOM)
+    }
+
+    fun rememberGoogleDiscoverDeparture() {
+        discoverReturn.remember(DiscoverReturnTarget.GOOGLE)
+    }
+
+    internal fun consumeDiscoverReturn(): DiscoverReturnTarget? = discoverReturn.consume(
+        uiState.value.settings.discoverMode.showsCustomFeed,
+        uiState.value.settings.discoverMode.usesGoogleOverlay
+    )
+
     /**
      * AndroidのHome操作が実行された際、すべてのオーバーレイを閉じてHOMEページへ戻す (仕様 4, 30)
      * ※通常のホーム遷移では毎回ハプティックや音を追加せず、Chime条件成立時のみ静かに反応する

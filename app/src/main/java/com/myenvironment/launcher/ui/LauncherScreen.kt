@@ -1400,6 +1400,7 @@ private fun LauncherPageContent(
                 settings = uiState.settings,
                 onOpenSettings = { viewModel.jumpToPage(LauncherPage.PAGE_ID_SETTINGS) },
                 feedBridge = viewModel.feedBridge,
+                onOpenArticle = viewModel::openDiscoverArticle,
                 isSettledOnDiscover = isSettledOnDiscover,
                 onSelectDiscoverMode = { viewModel.setDiscoverMode(it) },
                 onOpenGoogleApp = {

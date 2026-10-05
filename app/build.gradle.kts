@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 35
-        versionName = "1.3.7-preview.1"
+        versionCode = 36
+        versionName = "1.3.7-preview.2"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-05\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"HOME・戻る操作のページ移動が途中のアニメーション中断後も継続するよう修正。All Appsページの表示を切り替え可能に。フィード設定画面で6種類の独自フィードを個別にON・OFFでき、再起動やバックアップ復元後も設定を保持します。\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"Discoverの記事から戻る際、元の独自フィード・Google Discoverへ一度だけ復帰。HOME・戻る操作の受信継続を修正。All Appsページの表示を切り替え可能に。フィード設定画面で6種類の独自フィードを個別にON・OFFでき、再起動やバックアップ復元後も設定を保持します。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

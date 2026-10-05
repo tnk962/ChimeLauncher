@@ -39,6 +39,10 @@ class GoogleOverlayClient(private val activity: Activity) {
     val revealWidth: Float
         get() = activity.window.decorView.width.takeIf { it > 0 }?.toFloat()
             ?: activity.resources.displayMetrics.widthPixels.toFloat()
+    var isOpen = false
+        private set
+    private var requestedScroll = 0f
+    private var restorePending = false
     private var enabled = true
     private var started = false
     private var resumed = false
@@ -80,12 +84,13 @@ class GoogleOverlayClient(private val activity: Activity) {
     fun setEnabled(value: Boolean) {
         if (enabled == value) return
         enabled = value
+        if (!value) restorePending = false
         disconnect()
         if (enabled && started) connect()
     }
 
     fun onStart() { started = true; connect(); sendActivityState() }
-    fun onResume() { resumed = true; connect(); sendActivityState() }
+    fun onResume() { resumed = true; connect(); sendActivityState(); restoreIfReady() }
     fun onPause() { resumed = false; sendActivityState() }
     fun onStop() { started = false; sendActivityState(); disconnect() }
     fun onAttachedToWindow() { attached = true; attachWindow() }
@@ -172,6 +177,7 @@ class GoogleOverlayClient(private val activity: Activity) {
                         override fun overlayScrollChanged(progress: Float) {
                             main.post {
                                 if (session == generation && progress.isFinite()) {
+                                    isOpen = progress >= 0.9f
                                     mutableState.value = state.value.copy(progress = progress.coerceIn(0f, 1f))
                                 }
                             }
@@ -184,7 +190,7 @@ class GoogleOverlayClient(private val activity: Activity) {
                                     mutableState.value = state.value.copy(ready = ready,
                                         progress = if (ready) state.value.progress else 0f,
                                         message = if (ready) "さらに右へスワイプするとGoogle Discoverを表示します" else "Google Discoverは現在利用できません")
-                                    if (ready) { main.removeCallbacks(timeout); retryDelay = 1000L }
+                                    if (ready) { main.removeCallbacks(timeout); retryDelay = 1000L; restoreIfReady() }
                                 }
                             }
                         }
@@ -274,13 +280,34 @@ class GoogleOverlayClient(private val activity: Activity) {
 
     fun beginScroll(): Boolean {
         if (!state.value.ready) return false
+        requestedScroll = 0f
         return call { startScroll() }
     }
     fun scroll(progress: Float) {
-        if (progress.isFinite()) call { onScroll(progress.coerceIn(0f, 1f)) }
+        if (progress.isFinite()) {
+            requestedScroll = progress.coerceIn(0f, 1f)
+            call { onScroll(requestedScroll) }
+        }
     }
-    fun endScroll() { call { endScroll() } }
+    fun endScroll() {
+        // Some Google App error screens omit scroll callbacks; retain the reveal gesture result.
+        if (call { endScroll() }) isOpen = requestedScroll >= 0.5f
+    }
+    fun restoreOnResume() {
+        restorePending = enabled
+        restoreIfReady()
+    }
+
+    private fun restoreIfReady() {
+        if (restorePending && resumed && state.value.ready && call { openOverlay(1) }) {
+            restorePending = false
+            isOpen = true
+        }
+    }
+
     fun close() {
+        isOpen = false
+        restorePending = false
         call { closeOverlay(1) }
         mutableState.value = state.value.copy(progress = 0f)
     }
@@ -304,6 +331,7 @@ class GoogleOverlayClient(private val activity: Activity) {
     }
 
     private fun disconnect() {
+        isOpen = false
         generation++
         main.removeCallbacks(reconnect)
         main.removeCallbacks(timeout)

@@ -85,6 +85,7 @@ fun DiscoverPage(
     settings: LauncherSettings,
     onOpenSettings: () -> Unit,
     feedBridge: FeedBridge,
+    onOpenArticle: (String) -> Unit,
     isSettledOnDiscover: Boolean = true,
     onSelectDiscoverMode: (DiscoverMode) -> Unit,
     onOpenGoogleApp: () -> Unit,
@@ -344,7 +345,7 @@ fun DiscoverPage(
                             DiscoverArticleCard(
                                 article = article,
                                 feedBridge = feedBridge,
-                                onClick = { feedBridge.openArticleUrl(article.url) }
+                                onClick = { onOpenArticle(article.url) }
                             )
                         }
                     }
