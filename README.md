@@ -1,14 +1,18 @@
-# Chime Launcher (v1.3.5)
+# Chime Launcher (v1.3.7)
 
-## 現行版の操作マニュアル（v1.3.5）
+## 操作マニュアル（v1.3.5）
 
 [画像付き操作マニュアルを読む](docs/20261004_chimelauncher-user-manual.md) — GitHub上で本文・画像・目次をそのまま読めます。
 
 ---
 
-[正式版v1.3.5](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.5)向けの実装です。本体は **Build 26**、Chime Discover Companionは **Build 9**。ユーザーによるpreview05の実機動作確認が完了し、正式公開を承認済みです。正式版APKの再インストールは未確認です。
+[正式版v1.3.7](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.7)向けの実装です。本体は **Build 37**、Chime Discover Companionは **Build 11**。preview.2はユーザーの実機確認済みです。画像付き操作マニュアルはv1.3.5時点の画面を掲載しています。以後の変更は下記と[CHANGELOG](CHANGELOG.md)を参照してください。
 
-v1.3.5ではGoogle Discoverと独自フィードを個別の表示トグルに変更しました。GoogleのみONならHOME→All Apps→Google Discoverの順に移動します。Google Appの自動起動設定を廃止し、設定変更時のスクロール位置を保持。HOMEで戻る操作をしても画面を維持します。
+v1.3.7では、設定の「ページ・フィード表示」で **All AppsをON/OFF** でき、「フィード設定」の子画面で **独自フィード6カテゴリを個別にON/OFF** できます。All Appsを隠しても上スワイプのアプリ検索は利用できます。設定は再起動・バックアップ復元後も保持します。
+
+GalaxyでHOME／戻るが効かなくなる問題を修正しました。Discoverの記事から戻る・ホーム操作では元のDiscoverへ一度だけ復帰し、次のホーム操作はHOMEへ戻ります。Google Discoverは記事クリック通知がないため、検索など外部画面からの復帰も対象です。
+
+v1.3.6では上スワイプ検索に英字・かな順の全アプリ一覧と索引を追加。索引に触れるとキーボードを閉じ、選択文字を拡大します。
 
 Google Discoverを利用する場合はCompanion→本体の順に2つのAPKを導入してください。[導入・開発・検証範囲](docs/20261001_google-discover-preview.md)を参照してください。非公開Googleインターフェースへの依存と他環境での互換性リスクは残ります。
 
@@ -25,10 +29,10 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ### 1. 初回 APK をダウンロードする
 1. このリポジトリの **[Releases（最新リリース）](https://github.com/tnk962/ChimeLauncher/releases/latest)** ページを開きます。
-2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.5.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.5.apk`** も導入してください。
+2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.7.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.7.apk`** も導入してください。
 
 ### 2. Android 端末にインストールする
-1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリからAPKを開きます。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.5.apk`** → **`ChimeLauncher-v1.3.5.apk`** の順でインストールしてください。本体のみの場合は **`ChimeLauncher-v1.3.5.apk`** を開きます。
+1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリからAPKを開きます。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.7.apk`** → **`ChimeLauncher-v1.3.7.apk`** の順でインストールしてください。本体のみの場合は **`ChimeLauncher-v1.3.7.apk`** を開きます。
 2. 初回のみ「この提供元の不明なアプリをインストールしますか？」と表示された場合は、**「設定」→「この提供元のアプリを許可」** を ON にして「インストール」をタップします。
 3. **Google Play プロテクトの確認が表示された場合**:
    - 個人開発の配布用 APK のため、「Play プロテクトによりブロックされました」や「スキャンしますか？」と表示されることがあります。
@@ -145,7 +149,7 @@ All Appsの「左側半分だけに表示」の切替は廃止し、以前その
 
 ### Google Discoverの技術資料
 
-以下はv1.2.0導入当時の資料です。現行版の表示切替・導入手順は、上のv1.3.5操作マニュアルを参照してください。
+以下はv1.2.0導入当時の資料です。表示切替・導入手順は、上の操作マニュアルとv1.3.7の変更点を参照してください。
 
 - [Google Discover Companionの導入・実装・検証範囲](docs/20261001_google-discover-preview.md)
 - [Discoverの画面トークン修正と検証記録](docs/20261001_discover-window-token-fix.md)

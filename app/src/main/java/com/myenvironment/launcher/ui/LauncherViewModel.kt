@@ -23,6 +23,8 @@ import com.myenvironment.launcher.core.model.GridPosition
 import com.myenvironment.launcher.core.model.IndicatorStyle
 import com.myenvironment.launcher.core.model.ItemType
 import com.myenvironment.launcher.core.model.LauncherAction
+import com.myenvironment.launcher.core.feed.FeedCategory
+import com.myenvironment.launcher.core.model.visibleLauncherPages
 import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.core.model.LauncherSettings
 import com.myenvironment.launcher.core.model.LayoutItem
@@ -209,15 +211,7 @@ class LauncherViewModel(
             appUpdateManager.updateState
         ) { usage, hasUsagePerm, updateSt -> Triple(usage, hasUsagePerm, updateSt) }
     ) { (apps, pkgs, uPages), (items, dock, settings), (snaps, overlay, widgets), (usage, hasUsagePerm, updateSt) ->
-        val fixedLeftAndHome = buildList {
-            if (settings.discoverMode.showsCustomFeed) {
-                add(LauncherPage.FIXED_DISCOVER)
-            }
-            add(LauncherPage.FIXED_ALL_APPS)
-            add(LauncherPage.FIXED_HOME)
-        }
-        // 一番右にスワイプした時に Chime Launcher 設定ページが出るように末尾へ配置
-        val allPages = fixedLeftAndHome + uPages.sortedBy { it.sortOrder } + LauncherPage.FIXED_SETTINGS
+        val allPages = settings.visibleLauncherPages(uPages)
         val homeIdx = allPages.indexOfFirst { it.id == LauncherPage.PAGE_ID_HOME }.coerceAtLeast(0)
 
         LauncherUiState(
@@ -318,6 +312,21 @@ class LauncherViewModel(
     fun onChimeAnimationFinished() {
         overlayState.update { it.copy(activeChimeEvent = null) }
     }
+
+    private val discoverReturn = DiscoverReturn()
+
+    fun openDiscoverArticle(url: String) {
+        if (feedBridge.openArticleUrl(url)) discoverReturn.remember(DiscoverReturnTarget.CUSTOM)
+    }
+
+    fun rememberGoogleDiscoverDeparture() {
+        discoverReturn.remember(DiscoverReturnTarget.GOOGLE)
+    }
+
+    internal fun consumeDiscoverReturn(): DiscoverReturnTarget? = discoverReturn.consume(
+        uiState.value.settings.discoverMode.showsCustomFeed,
+        uiState.value.settings.discoverMode.usesGoogleOverlay
+    )
 
     /**
      * AndroidのHome操作が実行された際、すべてのオーバーレイを閉じてHOMEページへ戻す (仕様 4, 30)
@@ -1521,6 +1530,14 @@ class LauncherViewModel(
         viewModelScope.launch {
             settingsRepository.setSwipeDownNotificationEnabled(enabled)
         }
+    }
+
+    fun setAllAppsPageEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAllAppsPageEnabled(enabled) }
+    }
+
+    fun setFeedCategoryEnabled(category: FeedCategory, enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setFeedCategoryEnabled(category, enabled) }
     }
 
     fun setDiscoverMode(mode: DiscoverMode) {

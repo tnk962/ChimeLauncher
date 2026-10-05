@@ -1,5 +1,7 @@
 package com.myenvironment.launcher
 
+import android.app.KeyguardManager
+import android.os.PowerManager
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -12,6 +14,8 @@ import com.myenvironment.launcher.core.feed.overlay.GoogleOverlayClient
 import com.myenvironment.launcher.ui.discover.LocalGoogleOverlayClient
 import com.myenvironment.launcher.ui.LauncherScreen
 import com.myenvironment.launcher.ui.LauncherViewModel
+import com.myenvironment.launcher.ui.DiscoverReturnTarget
+import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.ui.theme.MyLauncherTheme
 
 /**
@@ -19,7 +23,7 @@ import com.myenvironment.launcher.ui.theme.MyLauncherTheme
  *
  * - CATEGORY_HOME / CATEGORY_DEFAULT に対応
  * - singleTask で常駐し、Homeジェスチャー (onNewIntent) 発生時は
- *   Activityを再生成せず既存PagerをHOMEページ位置へ戻す。
+ *   Activityを再生成せず、記事からの一度の復帰またはHOMEへ戻す。
  * - フォアグラウンド復帰・離脱時に Chime Moments (First / Return / Time Chime) を評価する。
  */
 class MainActivity : ComponentActivity() {
@@ -58,8 +62,33 @@ class MainActivity : ComponentActivity() {
         viewModel.onLauncherPaused()
     }
 
-    override fun onResume() { super.onResume(); googleOverlay.onResume() }
-    override fun onPause() { googleOverlay.onPause(); super.onPause() }
+    override fun onResume() {
+        super.onResume()
+        googleOverlay.onResume()
+        restoreDiscoverIfPending()
+    }
+    override fun onPause() {
+        val unlocked = !getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        val screenOn = getSystemService(PowerManager::class.java).isInteractive
+        if (googleOverlay.isOpen && unlocked && screenOn) viewModel.rememberGoogleDiscoverDeparture()
+        googleOverlay.onPause()
+        super.onPause()
+    }
+
+    private fun restoreDiscoverIfPending(): Boolean {
+        return when (viewModel.consumeDiscoverReturn()) {
+            DiscoverReturnTarget.CUSTOM -> {
+                googleOverlay.close()
+                viewModel.jumpToPage(LauncherPage.PAGE_ID_DISCOVER)
+                true
+            }
+            DiscoverReturnTarget.GOOGLE -> {
+                googleOverlay.restoreOnResume()
+                true
+            }
+            null -> false
+        }
+    }
     override fun onAttachedToWindow() { super.onAttachedToWindow(); googleOverlay.onAttachedToWindow() }
     override fun onDetachedFromWindow() { googleOverlay.onDetachedFromWindow(); super.onDetachedFromWindow() }
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -79,12 +108,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // AndroidのHome操作（Home Gesture / Homeボタン）が発生した場合、必ずHOMEページを表示する (仕様 4)
+        // AndroidのHome操作（Home Gesture / Homeボタン）が発生した場合、記事からの一度の復帰を除きHOMEページを表示する
         if (intent.action == Intent.ACTION_MAIN &&
             (intent.hasCategory(Intent.CATEGORY_HOME) || intent.hasCategory(Intent.CATEGORY_LAUNCHER))
         ) {
-            googleOverlay.close()
-            viewModel.onHomeGestureInvoked()
+            if (!restoreDiscoverIfPending()) {
+                googleOverlay.close()
+                viewModel.onHomeGestureInvoked()
+            }
         }
     }
 

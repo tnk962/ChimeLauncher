@@ -551,11 +551,14 @@ fun LauncherScreen(
 
     // Compact (1ページ) <-> Expanded (2ページ見開き) 切替時に、見ていたページへ即座に同期
     LaunchedEffect(isDualPageMode, pages.size, dualSlots.size) {
-        val currentFocusedIdx = pages.indexOfFirst { it.id == focusedPageId }
+        val retainedPageId = focusedPageId.takeIf { id -> pages.any { it.id == id } }
+            ?: LauncherPage.PAGE_ID_HOME
+        focusedPageId = retainedPageId
+        val currentFocusedIdx = pages.indexOfFirst { it.id == retainedPageId }
             .takeIf { it >= 0 } ?: homePageIndex
 
         if (isDualPageMode) {
-            val targetSlot = resolveExpandedDualSlotIndex(dualSlots, focusedPageId)
+            val targetSlot = resolveExpandedDualSlotIndex(dualSlots, retainedPageId)
                 .coerceIn(0, (dualSlots.size - 1).coerceAtLeast(0))
             if (dualPagerState.currentPage != targetSlot) {
                 dualPagerState.scrollToPage(targetSlot)
@@ -589,7 +592,7 @@ fun LauncherScreen(
 
     // Homeジェスチャーまたはページジャンプ要求時に指定ページへスクロール (仕様 4)
     LaunchedEffect(viewModel, pages, dualSlots, isDualPageMode) {
-        viewModel.pageNavigationEvents.collect { targetPageId ->
+        viewModel.pageNavigationEvents.collectPageNavigationRequests { targetPageId ->
             val targetIdx = pages.indexOfFirst { it.id == targetPageId }
             if (targetIdx >= 0) {
                 focusedPageId = targetPageId
@@ -639,10 +642,13 @@ fun LauncherScreen(
             pages.getOrNull(singlePagerState.settledPage)?.id == LauncherPage.PAGE_ID_DISCOVER
     }
 
-    // Google-only mode has no launcher Discover page: reveal directly from the All Apps edge.
+    val isSettingsPageActive = leftmostActivePageId == LauncherPage.PAGE_ID_SETTINGS &&
+        !(if (isDualPageMode) dualPagerState.isScrollInProgress else singlePagerState.isScrollInProgress)
+
+    // Google-only mode reveals from the leftmost visible page, including HOME when All Apps is hidden.
     val canRevealGoogleFromAllApps = uiState.settings.discoverMode == DiscoverMode.GOOGLE_ONLY &&
         activeDragState == null && !uiState.overlay.isEditMode &&
-        leftmostActivePageId == LauncherPage.PAGE_ID_ALL_APPS &&
+        leftmostActivePageId == pages.firstOrNull()?.id &&
         !(if (isDualPageMode) dualPagerState.isScrollInProgress else singlePagerState.isScrollInProgress)
     val googleOnlyEdgeModifier = Modifier.pointerInput(canRevealGoogleFromAllApps, googleOverlay) {
         if (!canRevealGoogleFromAllApps) return@pointerInput
@@ -829,6 +835,7 @@ fun LauncherScreen(
                                     isHalfPaneInDualMode = false,
                                     isSettledOnDiscover = isSettledOnDiscover,
                                     settingsScrollState = embeddedSettingsScrollState,
+                                    isSettingsPageActive = isSettingsPageActive,
                                     activeDragState = activeDragState,
                                     highlightedDropCell = if (currentDropTarget?.first == slot.page.id) currentDropTarget.third else null,
                                     editableHomePages = editableHomePages,
@@ -851,6 +858,7 @@ fun LauncherScreen(
                                             isHalfPaneInDualMode = true,
                                             isSettledOnDiscover = isSettledOnDiscover,
                                             settingsScrollState = embeddedSettingsScrollState,
+                                            isSettingsPageActive = isSettingsPageActive,
                                             activeDragState = activeDragState,
                                             highlightedDropCell = if (currentDropTarget?.first == slot.leftPage.id) currentDropTarget.third else null,
                                             editableHomePages = editableHomePages,
@@ -879,6 +887,7 @@ fun LauncherScreen(
                                             isHalfPaneInDualMode = true,
                                             isSettledOnDiscover = isSettledOnDiscover,
                                             settingsScrollState = embeddedSettingsScrollState,
+                                            isSettingsPageActive = isSettingsPageActive,
                                             activeDragState = activeDragState,
                                             highlightedDropCell = if (currentDropTarget?.first == slot.rightPage.id) currentDropTarget.third else null,
                                             editableHomePages = editableHomePages,
@@ -912,6 +921,7 @@ fun LauncherScreen(
                             isHalfPaneInDualMode = false,
                             isSettledOnDiscover = isSettledOnDiscover,
                             settingsScrollState = embeddedSettingsScrollState,
+                            isSettingsPageActive = isSettingsPageActive,
                             activeDragState = activeDragState,
                             highlightedDropCell = if (currentDropTarget?.first == page.id) currentDropTarget.third else null,
                             editableHomePages = editableHomePages,
@@ -1175,6 +1185,8 @@ fun LauncherScreen(
                 onSelectReturnChimeInterval = { viewModel.setReturnChimeInterval(it) },
                 onToggleTimeChime = { viewModel.setTimeChimeEnabled(it) },
                 onToggleSwipeDownNotification = { viewModel.setSwipeDownNotificationEnabled(it) },
+                onSetAllAppsPageEnabled = { viewModel.setAllAppsPageEnabled(it) },
+                onSetFeedCategoryEnabled = { category, enabled -> viewModel.setFeedCategoryEnabled(category, enabled) },
                 onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
                 onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
                 onOpenDefaultHomeSettings = { viewModel.openDefaultHomeSettings() },
@@ -1371,6 +1383,7 @@ private fun LauncherPageContent(
     isHalfPaneInDualMode: Boolean,
     isSettledOnDiscover: Boolean,
     settingsScrollState: ScrollState,
+    isSettingsPageActive: Boolean,
     activeDragState: CrossPageDragState?,
     highlightedDropCell: GridPosition?,
     editableHomePages: List<LauncherPage>,
@@ -1384,8 +1397,10 @@ private fun LauncherPageContent(
     when (page.id) {
         LauncherPage.PAGE_ID_DISCOVER -> {
             DiscoverPage(
-                discoverMode = uiState.settings.discoverMode,
+                settings = uiState.settings,
+                onOpenSettings = { viewModel.jumpToPage(LauncherPage.PAGE_ID_SETTINGS) },
                 feedBridge = viewModel.feedBridge,
+                onOpenArticle = viewModel::openDiscoverArticle,
                 isSettledOnDiscover = isSettledOnDiscover,
                 onSelectDiscoverMode = { viewModel.setDiscoverMode(it) },
                 onOpenGoogleApp = {
@@ -1467,6 +1482,7 @@ private fun LauncherPageContent(
                 snapshots = uiState.snapshots,
                 statusMessage = uiState.overlay.statusMessage,
                 isEmbeddedPage = true,
+                isActive = isSettingsPageActive,
                 scrollState = settingsScrollState,
                 hasUsageAccessPermission = uiState.hasUsageAccessPermission,
                 updateState = uiState.updateState,
@@ -1486,6 +1502,8 @@ private fun LauncherPageContent(
                 onSelectReturnChimeInterval = { viewModel.setReturnChimeInterval(it) },
                 onToggleTimeChime = { viewModel.setTimeChimeEnabled(it) },
                 onToggleSwipeDownNotification = { viewModel.setSwipeDownNotificationEnabled(it) },
+                onSetAllAppsPageEnabled = { viewModel.setAllAppsPageEnabled(it) },
+                onSetFeedCategoryEnabled = { category, enabled -> viewModel.setFeedCategoryEnabled(category, enabled) },
                 onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
                 onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
                 onOpenDefaultHomeSettings = { viewModel.openDefaultHomeSettings() },
