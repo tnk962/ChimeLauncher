@@ -9,6 +9,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.myenvironment.launcher.core.feed.FeedCategory
 import androidx.datastore.preferences.preferencesDataStore
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
@@ -44,6 +46,8 @@ class DataStoreSettingsRepository(
         val TINY_SHOW_LABELS = booleanPreferencesKey("tiny_icons_show_labels")
         val SEARCH_INDEX_EDGE = intPreferencesKey("search_index_edge_distance_dp")
         val SWIPE_DOWN_NOTIFICATION = booleanPreferencesKey("swipe_down_notification_enabled")
+        val ALL_APPS_ENABLED = booleanPreferencesKey("all_apps_page_enabled")
+        val DISABLED_FEEDS = stringSetPreferencesKey("disabled_feed_category_ids")
         val DISCOVER_MODE = stringPreferencesKey("discover_mode_v2")
         val EXPANDED_LAYOUT_MODE = stringPreferencesKey("expanded_page_layout_mode")
         val ALL_APPS_LEFT_ONLY_EXPANDED = booleanPreferencesKey("all_apps_left_only_expanded")
@@ -96,6 +100,8 @@ class DataStoreSettingsRepository(
             searchIndexEdgeDistanceDp = (prefs[Keys.SEARCH_INDEX_EDGE] ?: default.searchIndexEdgeDistanceDp).coerceIn(32, 128),
             swipeDownNotificationEnabled = prefs[Keys.SWIPE_DOWN_NOTIFICATION] ?: default.swipeDownNotificationEnabled,
             discoverMode = discoverMode,
+            allAppsPageEnabled = prefs[Keys.ALL_APPS_ENABLED] ?: default.allAppsPageEnabled,
+            disabledFeedCategoryIds = prefs[Keys.DISABLED_FEEDS] ?: default.disabledFeedCategoryIds,
             expandedPageLayoutMode = expandedLayoutMode,
             allAppsLeftOnlyInExpandedSingle = prefs[Keys.ALL_APPS_LEFT_ONLY_EXPANDED]
                 ?: default.allAppsLeftOnlyInExpandedSingle,
@@ -175,6 +181,17 @@ class DataStoreSettingsRepository(
     override suspend fun setSwipeDownNotificationEnabled(enabled: Boolean) {
         appContext.launcherDataStore.edit { prefs ->
             prefs[Keys.SWIPE_DOWN_NOTIFICATION] = enabled
+        }
+    }
+
+    override suspend fun setAllAppsPageEnabled(enabled: Boolean) {
+        appContext.launcherDataStore.edit { it[Keys.ALL_APPS_ENABLED] = enabled }
+    }
+
+    override suspend fun setFeedCategoryEnabled(category: FeedCategory, enabled: Boolean) {
+        appContext.launcherDataStore.edit { prefs ->
+            val disabled = prefs[Keys.DISABLED_FEEDS].orEmpty()
+            prefs[Keys.DISABLED_FEEDS] = if (enabled) disabled - category.id else disabled + category.id
         }
     }
 
@@ -259,6 +276,8 @@ class DataStoreSettingsRepository(
             prefs[Keys.TINY_SHOW_LABELS] = newSettings.tinyIconsShowLabels
             prefs[Keys.SEARCH_INDEX_EDGE] = newSettings.searchIndexEdgeDistanceDp.coerceIn(32, 128)
             prefs[Keys.SWIPE_DOWN_NOTIFICATION] = newSettings.swipeDownNotificationEnabled
+            prefs[Keys.ALL_APPS_ENABLED] = newSettings.allAppsPageEnabled
+            prefs[Keys.DISABLED_FEEDS] = newSettings.disabledFeedCategoryIds
             prefs[Keys.DISCOVER_MODE] = newSettings.discoverMode.normalized.name
             prefs[Keys.EXPANDED_LAYOUT_MODE] = newSettings.expandedPageLayoutMode.name
             prefs[Keys.ALL_APPS_LEFT_ONLY_EXPANDED] = newSettings.allAppsLeftOnlyInExpandedSingle

@@ -1,6 +1,7 @@
 package com.myenvironment.launcher.core.model
 
 import kotlinx.serialization.Serializable
+import com.myenvironment.launcher.core.feed.FeedCategory
 
 /**
  * Google Discover ページの動作モード (仕様 29)
@@ -144,6 +145,8 @@ data class LauncherSettings(
     val searchIndexEdgeDistanceDp: Int = 32,
     val swipeDownNotificationEnabled: Boolean = true,
     val discoverMode: DiscoverMode = DiscoverMode.NATIVE_BRIDGE,
+    val allAppsPageEnabled: Boolean = true,
+    val disabledFeedCategoryIds: Set<String> = emptySet(),
     val expandedPageLayoutMode: ExpandedPageLayoutMode = ExpandedPageLayoutMode.DUAL_PAGE,
     val allAppsLeftOnlyInExpandedSingle: Boolean = false,
     val indicatorStyle: IndicatorStyle = IndicatorStyle.DOTS,
@@ -153,5 +156,11 @@ data class LauncherSettings(
     val timeChimeEnabled: Boolean = true,
     val chimeSoundEnabled: Boolean = false
 ) {
+    val enabledFeedCategories: List<FeedCategory>
+        get() = FeedCategory.entries.filter { it.id !in disabledFeedCategoryIds }
+
+    fun resolveFeedCategory(preferred: FeedCategory?): FeedCategory? =
+        preferred?.takeIf { it in enabledFeedCategories } ?: enabledFeedCategories.firstOrNull()
+
     val effectiveDockIconCount: Int get() = dockIconCount.coerceIn(1, 12)
 }

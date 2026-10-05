@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.core.storage
 
+import com.myenvironment.launcher.core.feed.FeedCategory
 import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
@@ -37,6 +38,10 @@ interface SettingsRepository {
     suspend fun setSearchIndexEdgeDistanceDp(distanceDp: Int)
 
     suspend fun setSwipeDownNotificationEnabled(enabled: Boolean)
+
+    suspend fun setAllAppsPageEnabled(enabled: Boolean)
+
+    suspend fun setFeedCategoryEnabled(category: FeedCategory, enabled: Boolean)
 
     suspend fun setDiscoverMode(mode: DiscoverMode)
 

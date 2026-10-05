@@ -45,8 +45,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,8 +68,10 @@ import com.myenvironment.launcher.core.feed.FeedBridge
 import com.myenvironment.launcher.core.feed.FeedCategory
 import com.myenvironment.launcher.core.feed.overlay.OverlayDragSession
 import com.myenvironment.launcher.core.model.DiscoverMode
+import com.myenvironment.launcher.core.model.LauncherSettings
 import com.myenvironment.launcher.core.model.LauncherAction
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * Page -2: Discover & はてなブックマーク 統合フィードページ (仕様 27, 28, 29 / v0.5.0)
@@ -80,7 +82,8 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun DiscoverPage(
-    discoverMode: DiscoverMode,
+    settings: LauncherSettings,
+    onOpenSettings: () -> Unit,
     feedBridge: FeedBridge,
     isSettledOnDiscover: Boolean = true,
     onSelectDiscoverMode: (DiscoverMode) -> Unit,
@@ -88,55 +91,58 @@ fun DiscoverPage(
     onTriggerAction: (LauncherAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val coroutineScope = rememberCoroutineScope()
+    val discoverMode = settings.discoverMode
+    val enabledCategories = settings.enabledFeedCategories
     val googleOverlay = LocalGoogleOverlayClient.current
     val overlayState = googleOverlay?.state?.collectAsStateWithLifecycle()?.value
     val overlayEnabled = discoverMode.usesGoogleOverlay
     val currentOverlayEnabled by rememberUpdatedState(overlayEnabled)
     val touchSlop = LocalViewConfiguration.current.touchSlop
-    var selectedCategory by remember { mutableStateOf(FeedCategory.DISCOVER_CURATED) }
+    var preferredCategory by remember { mutableStateOf(FeedCategory.DISCOVER_CURATED) }
+    val selectedCategory = settings.resolveFeedCategory(preferredCategory)
     val articlesCache = remember { mutableStateMapOf<FeedCategory, List<DiscoverArticle>>() }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val loading = remember { mutableStateMapOf<FeedCategory, Boolean>() }
+    val errors = remember { mutableStateMapOf<FeedCategory, String>() }
+    var refreshGeneration by remember { mutableIntStateOf(0) }
     var showModeDialog by remember { mutableStateOf(false) }
     var hasClearedInitialCache by remember { mutableStateOf(false) }
     val currentSettled by rememberUpdatedState(isSettledOnDiscover)
 
-    fun loadCategory(category: FeedCategory, forceRefresh: Boolean = false) {
-        if (forceRefresh) {
+    fun refreshCategory() {
+        selectedCategory?.let { category ->
             feedBridge.clearCache()
             articlesCache.remove(category)
-        } else if (articlesCache.containsKey(category)) {
-            errorMessage = null
-            return
-        }
-        coroutineScope.launch {
-            isLoading = true
-            errorMessage = null
-            val result = feedBridge.fetchArticles(category)
-            result.fold(
-                onSuccess = { list ->
-                    articlesCache[category] = list
-                },
-                onFailure = { err ->
-                    errorMessage = "フィードを取得できませんでした (${err.localizedMessage ?: "通信エラー"})"
-                }
-            )
-            isLoading = false
+            refreshGeneration++
         }
     }
 
-    LaunchedEffect(selectedCategory, discoverMode) {
-        if (!discoverMode.showsCustomFeed) return@LaunchedEffect
+    // The effect cancels an in-flight request when the page/category is disabled or left.
+    LaunchedEffect(selectedCategory, discoverMode, isSettledOnDiscover, refreshGeneration) {
+        val category = selectedCategory ?: return@LaunchedEffect
+        if (!discoverMode.showsCustomFeed || !isSettledOnDiscover) return@LaunchedEffect
         if (!hasClearedInitialCache) {
             feedBridge.clearCache()
             articlesCache.clear()
             hasClearedInitialCache = true
         }
-        loadCategory(selectedCategory, forceRefresh = false)
+        if (articlesCache.containsKey(category)) return@LaunchedEffect
+        loading[category] = true
+        errors.remove(category)
+        try {
+            val result = feedBridge.fetchArticles(category)
+            currentCoroutineContext().ensureActive()
+            result.fold(
+                onSuccess = { articlesCache[category] = it },
+                onFailure = { errors[category] = "フィードを取得できませんでした (${it.localizedMessage ?: "通信エラー"})" }
+            )
+        } finally {
+            loading[category] = false
+        }
     }
 
     val currentArticles = articlesCache[selectedCategory].orEmpty()
+    val isLoading = loading[selectedCategory] == true
+    val errorMessage = errors[selectedCategory]
 
     Column(
         modifier = modifier
@@ -231,7 +237,8 @@ fun DiscoverPage(
                 }
 
                 IconButton(
-                    onClick = { loadCategory(selectedCategory, forceRefresh = true) },
+                    onClick = { refreshCategory() },
+                    enabled = selectedCategory != null,
                     modifier = Modifier.size(34.dp)
                 ) {
                     Icon(
@@ -263,6 +270,18 @@ fun DiscoverPage(
                 .fillMaxWidth()
         ) {
             when {
+                selectedCategory == null -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center).padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("表示するフィードがありません。", color = Color.White)
+                        Text("設定画面の「フィード設定」で表示したいジャンルをONにしてください。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(onClick = onOpenSettings) { Text("設定を開く") }
+                    }
+                }
                 isLoading && currentArticles.isEmpty() -> {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
@@ -299,7 +318,7 @@ fun DiscoverPage(
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Button(
-                                    onClick = { loadCategory(selectedCategory, forceRefresh = true) }
+                                    onClick = { refreshCategory() }
                                 ) {
                                     Text("再試行")
                                 }
@@ -348,11 +367,11 @@ fun DiscoverPage(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                items(FeedCategory.entries) { category ->
+                items(enabledCategories, key = { it.id }) { category ->
                     val selected = category == selectedCategory
                     FilterChip(
                         selected = selected,
-                        onClick = { selectedCategory = category },
+                        onClick = { preferredCategory = category },
                         label = {
                             Text(
                                 text = category.label,

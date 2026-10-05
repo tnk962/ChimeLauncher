@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 34
-        versionName = "1.3.6"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-04\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"更新確認時の表示位置を維持。検索候補と全アプリの縦一覧を表示。索引を検索欄の右端に揃え、「すべてのアプリ」の見出しの高さに索引のAを揃えます。キーボードを閉じても文字サイズと配置を維持します。なぞった文字を拡大表示し、索引に触れた瞬間や一覧のスクロール開始時にキーボードを閉じます。\"")
+        versionCode = 35
+        versionName = "1.3.7-preview.1"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-05\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"HOME・戻る操作のページ移動が途中のアニメーション中断後も継続するよう修正。All Appsページの表示を切り替え可能に。フィード設定画面で6種類の独自フィードを個別にON・OFFでき、再起動やバックアップ復元後も設定を保持します。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
