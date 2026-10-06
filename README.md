@@ -1,4 +1,4 @@
-# Chime Launcher (v1.3.7)
+# Chime Launcher (v1.3.8)
 
 ## 操作マニュアル（v1.3.5）
 
@@ -6,7 +6,7 @@
 
 ---
 
-[正式版v1.3.7](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.7)向けの実装です。本体は **Build 37**、Chime Discover Companionは **Build 11**。preview.2はユーザーの実機確認済みです。画像付き操作マニュアルはv1.3.5時点の画面を掲載しています。以後の変更は下記と[CHANGELOG](CHANGELOG.md)を参照してください。
+[正式版v1.3.8](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.8)向けの実装です。本体は **Build 42**、Chime Discover Companionは **Build 12**。フォルダ機能と修正はpreview.4でユーザーの実機確認OKを受領しました。画像付き操作マニュアルはv1.3.5時点の画面を掲載しています。以後の変更は下記と[CHANGELOG](CHANGELOG.md)を参照してください。
 
 v1.3.7では、設定の「ページ・フィード表示」で **All AppsをON/OFF** でき、「フィード設定」の子画面で **独自フィード6カテゴリを個別にON/OFF** できます。All Appsを隠しても上スワイプのアプリ検索は利用できます。設定は再起動・バックアップ復元後も保持します。
 
@@ -29,10 +29,10 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ### 1. 初回 APK をダウンロードする
 1. このリポジトリの **[Releases（最新リリース）](https://github.com/tnk962/ChimeLauncher/releases/latest)** ページを開きます。
-2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.7.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.7.apk`** も導入してください。
+2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.8.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.8.apk`** も導入してください。
 
 ### 2. Android 端末にインストールする
-1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリからAPKを開きます。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.7.apk`** → **`ChimeLauncher-v1.3.7.apk`** の順でインストールしてください。本体のみの場合は **`ChimeLauncher-v1.3.7.apk`** を開きます。
+1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリからAPKを開きます。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.8.apk`** → **`ChimeLauncher-v1.3.8.apk`** の順でインストールしてください。本体のみの場合は **`ChimeLauncher-v1.3.8.apk`** を開きます。
 2. 初回のみ「この提供元の不明なアプリをインストールしますか？」と表示された場合は、**「設定」→「この提供元のアプリを許可」** を ON にして「インストール」をタップします。
 3. **Google Play プロテクトの確認が表示された場合**:
    - 個人開発の配布用 APK のため、「Play プロテクトによりブロックされました」や「スキャンしますか？」と表示されることがあります。
@@ -51,7 +51,7 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ---
 
-## 次期版 v1.3.8-preview.4：ホーム・Dockのフォルダ
+## v1.3.8：ホーム・Dockのフォルダ
 
 - ホームまたはDockのアプリを長押ししてドラッグし、別のアプリの中央へ重ねて離すとフォルダを作成します。既存フォルダの中央へ重ねると追加できます。検索／All Appsからの追加にも対応します。
 - フォルダをタップして開き、アプリをタップして起動します。開いた直後はアプリ一覧を表示し、中のアプリを長押しすると編集に入ります。編集時に名前変更・追加・ホーム／Dockへの取り出しができます。「編集を完了」で通常表示へ戻ります。最後のアプリを取り出すと空のフォルダは削除されます。
@@ -162,7 +162,7 @@ All Appsの「左側半分だけに表示」の切替は廃止し、以前その
 
 ### Google Discoverの技術資料
 
-以下はv1.2.0導入当時の資料です。表示切替・導入手順は、上の操作マニュアルとv1.3.7の変更点を参照してください。
+以下はv1.2.0導入当時の資料です。表示切替・導入手順は、上の操作マニュアルとv1.3.8の変更点を参照してください。
 
 - [Google Discover Companionの導入・実装・検証範囲](docs/20261001_google-discover-preview.md)
 - [Discoverの画面トークン修正と検証記録](docs/20261001_discover-window-token-fix.md)
