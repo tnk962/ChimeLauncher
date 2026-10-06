@@ -14,7 +14,9 @@ enum class ItemType {
     /** Launcher独自Action (Hatena Feed, 通知履歴, Search, Settings等) */
     ACTION,
     /** Android AppWidget (ホーム画面ウィジェット) */
-    WIDGET
+    WIDGET,
+    /** Home / Dock folder containing app shortcuts. */
+    FOLDER
 }
 
 /**
@@ -42,7 +44,8 @@ data class LayoutItem(
     val expanded: GridPosition? = null,
     val spanX: Int = 1,
     val spanY: Int = 1,
-    val appWidgetId: Int = NO_WIDGET_ID
+    val appWidgetId: Int = NO_WIDGET_ID,
+    val folderApps: List<FolderApp> = emptyList()
 ) {
     /**
      * 現在のグリッド列数・行数内に収まる有効なセル幅・高さを返す。

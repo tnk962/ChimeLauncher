@@ -1,5 +1,10 @@
 package com.myenvironment.launcher.core.storage.db
 
+import androidx.room.ColumnInfo
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import com.myenvironment.launcher.core.model.FolderApp
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.myenvironment.launcher.core.model.BackupSnapshotSummary
@@ -46,7 +51,8 @@ data class LayoutItemEntity(
     val expandedY: Int?,
     val spanX: Int,
     val spanY: Int,
-    val appWidgetId: Int = LayoutItem.NO_WIDGET_ID
+    val appWidgetId: Int = LayoutItem.NO_WIDGET_ID,
+    @ColumnInfo(defaultValue = "'[]'") val folderAppsJson: String = "[]"
 ) {
     fun toDomain(): LayoutItem = LayoutItem(
         id = id,
@@ -64,7 +70,8 @@ data class LayoutItemEntity(
         },
         spanX = spanX,
         spanY = spanY,
-        appWidgetId = appWidgetId
+        appWidgetId = appWidgetId,
+        folderApps = Json.decodeFromString<List<FolderApp>>(folderAppsJson)
     )
 
     companion object {
@@ -82,7 +89,8 @@ data class LayoutItemEntity(
             expandedY = item.expanded?.y,
             spanX = item.spanX,
             spanY = item.spanY,
-            appWidgetId = item.appWidgetId
+            appWidgetId = item.appWidgetId,
+            folderAppsJson = Json.encodeToString(item.folderApps)
         )
     }
 }
@@ -95,7 +103,8 @@ data class DockItemEntity(
     val packageName: String,
     val activityName: String,
     val targetUri: String,
-    val label: String
+    val label: String,
+    @ColumnInfo(defaultValue = "'[]'") val folderAppsJson: String = "[]"
 ) {
     fun toDomain(): DockItem = DockItem(
         id = id,
@@ -104,7 +113,8 @@ data class DockItemEntity(
         packageName = packageName,
         activityName = activityName,
         targetUri = targetUri,
-        label = label
+        label = label,
+        folderApps = Json.decodeFromString<List<FolderApp>>(folderAppsJson)
     )
 
     companion object {
@@ -115,7 +125,8 @@ data class DockItemEntity(
             packageName = item.packageName,
             activityName = item.activityName,
             targetUri = item.targetUri,
-            label = item.label
+            label = item.label,
+            folderAppsJson = Json.encodeToString(item.folderApps)
         )
     }
 }

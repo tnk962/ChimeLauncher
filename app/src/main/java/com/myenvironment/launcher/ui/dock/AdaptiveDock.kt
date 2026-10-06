@@ -40,6 +40,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -213,7 +214,7 @@ private fun DockItemSlot(
     val isInstalled = when (item.type) {
         ItemType.APP -> installedPackages.contains(item.packageName) ||
             appDiscoveryRepository.isPackageInstalled(item.packageName)
-        ItemType.SHORTCUT, ItemType.ACTION, ItemType.WIDGET -> true
+        ItemType.SHORTCUT, ItemType.ACTION, ItemType.WIDGET, ItemType.FOLDER -> true
     }
 
     var menuExpanded by remember { mutableStateOf(false) }
@@ -222,6 +223,7 @@ private fun DockItemSlot(
     Box(contentAlignment = Alignment.Center) {
         LauncherItemGraphic(
             type = item.type,
+            folderApps = item.folderApps,
             packageName = item.packageName,
             activityName = item.activityName,
             targetUri = item.targetUri,
@@ -238,7 +240,7 @@ private fun DockItemSlot(
                     createState = { finger ->
                         CrossPageDragState(
                             item = LayoutItem(item.id, LauncherPage.PAGE_ID_HOME, item.type,
-                                item.packageName, item.activityName, item.targetUri, item.label, GridPosition(0, 0)),
+                                item.packageName, item.activityName, item.targetUri, item.label, GridPosition(0, 0), folderApps = item.folderApps),
                             sourcePageId = LauncherPage.PAGE_ID_HOME, spanX = 1, spanY = 1,
                             itemWidthDp = 56.dp, itemHeightDp = 56.dp,
                             itemWidthPx = dragSizePx, itemHeightPx = dragSizePx,
@@ -247,7 +249,10 @@ private fun DockItemSlot(
                         )
                     }
                 )
-                .semantics { onLongClick("Dockのメニュー") { menuExpanded = true; true } }
+                .semantics {
+                    if (item.type == ItemType.FOLDER) contentDescription = item.label
+                    onLongClick("Dockのメニュー") { menuExpanded = true; true }
+                }
                 .clickable { onClick(isInstalled) }
                 .padding(4.dp)
         )

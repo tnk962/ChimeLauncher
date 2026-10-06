@@ -1,5 +1,15 @@
 package com.myenvironment.launcher.ui
 
+import com.myenvironment.launcher.core.model.FolderApp
+import com.myenvironment.launcher.core.model.asLayoutItem
+import com.myenvironment.launcher.core.model.folder
+import com.myenvironment.launcher.core.model.withFolderApps
+import com.myenvironment.launcher.core.model.addFolderApp
+import com.myenvironment.launcher.core.model.groupApp
+import com.myenvironment.launcher.core.model.renameFolder
+import com.myenvironment.launcher.core.model.moveHomeToDock
+import com.myenvironment.launcher.core.model.freeFolderCell
+import com.myenvironment.launcher.core.model.replaceFolderApp
 import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
@@ -101,6 +111,7 @@ internal data class PendingWidgetPlacement(
  * ViewModel内のローカルUI制御状態
  */
 data class OverlayControlState(
+    val activeFolderId: String? = null,
     val isEditMode: Boolean = false,
     val undoCount: Int = 0,
     val isLayoutOperationInProgress: Boolean = false,
@@ -336,6 +347,7 @@ class LauncherViewModel(
         exitEditMode()
         overlayState.update {
             it.copy(
+                activeFolderId = null,
                 isEditMode = false,
                 isSearchOverlayOpen = false,
                 isSettingsOpen = false,
@@ -514,6 +526,7 @@ class LauncherViewModel(
     // --- アプリ / Shortcut / Action / Widget / Placeholder 起動 (仕様 12, 24, 25, 30) ---
     fun onLayoutItemClicked(item: LayoutItem, isInstalled: Boolean) {
         when (item.type) {
+            ItemType.FOLDER -> overlayState.update { it.copy(activeFolderId = item.id) }
             ItemType.APP -> {
                 if (!isInstalled) {
                     // 未インストールPlaceholderの場合はPlayストア連携ダイアログを表示 (仕様 25)
@@ -546,6 +559,7 @@ class LauncherViewModel(
 
     fun onDockItemClicked(item: DockItem, isInstalled: Boolean) {
         when (item.type) {
+            ItemType.FOLDER -> overlayState.update { it.copy(activeFolderId = item.id) }
             ItemType.APP, ItemType.WIDGET -> {
                 if (!isInstalled) {
                     overlayState.update {
@@ -609,7 +623,12 @@ class LauncherViewModel(
      */
     fun replaceMissingItemWithInstalledApp(missingItem: LayoutItem, targetApp: AppInfo) {
         launchWithoutUndo { snapshot ->
-            if (missingItem.pageId == "dock") {
+            if (missingItem.pageId.startsWith("folder:")) {
+                val updated = snapshot.replaceFolderApp(missingItem.pageId.removePrefix("folder:"), missingItem.id,
+                    FolderApp(missingItem.id, targetApp.packageName, targetApp.activityName, targetApp.label))
+                    ?: return@launchWithoutUndo
+                layoutRepository.restoreLayoutSnapshot(updated)
+            } else if (missingItem.pageId == "dock") {
                 val existingDock = snapshot.dockItems.find { it.id == missingItem.id }
                 if (existingDock != null) {
                     layoutRepository.upsertDockItem(
@@ -1297,6 +1316,86 @@ class LauncherViewModel(
         }
     }
 
+    fun closeFolder() { overlayState.update { it.copy(activeFolderId = null) } }
+
+    fun renameFolder(id: String, name: String) = runIfUnlocked {
+        enterEditMode()
+        launchLayoutEdit { snapshot -> snapshot.renameFolder(id, name)?.let { layoutRepository.restoreLayoutSnapshot(it) } }
+    }
+
+    fun addAppToFolder(id: String, app: AppInfo) = runIfUnlocked {
+        enterEditMode()
+        launchLayoutEdit { snapshot ->
+            snapshot.addFolderApp(id, FolderApp(UUID.randomUUID().toString(), app.packageName, app.activityName, app.label))
+                ?.let { layoutRepository.restoreLayoutSnapshot(it) }
+        }
+    }
+
+    fun launchFolderApp(folderId: String, app: FolderApp) {
+        closeFolder()
+        onLayoutItemClicked(LayoutItem(app.id, "folder:$folderId", ItemType.APP, app.packageName,
+            app.activityName, label = app.label, compact = GridPosition(0, 0)), container.appDiscoveryRepository.isPackageInstalled(app.packageName))
+    }
+
+    fun groupAppIntoFolder(source: LayoutItem, fromDock: Boolean, copySource: Boolean, targetId: String) = runIfUnlocked {
+        launchLayoutEdit { snapshot ->
+            snapshot.groupApp(if (copySource) source.copy(id = UUID.randomUUID().toString()) else source,
+                fromDock, copySource, targetId, UUID.randomUUID().toString())?.let { layoutRepository.restoreLayoutSnapshot(it) }
+        }
+    }
+
+    fun moveHomeItemToDock(id: String, index: Int) = runIfUnlocked {
+        launchLayoutEdit { snapshot ->
+            val updated = snapshot.moveHomeToDock(id, index, settingsRepository.settings.first().effectiveDockIconCount)
+            if (updated == null) Toast.makeText(container.appContext, "Dockが満杯です", Toast.LENGTH_SHORT).show()
+            else layoutRepository.restoreLayoutSnapshot(updated)
+        }
+    }
+
+    fun moveDockItemToHome(id: String, pageId: String, preferred: GridPosition, expanded: Boolean) = runIfUnlocked {
+        launchLayoutEdit { snapshot ->
+            val item = snapshot.dockItems.find { it.id == id } ?: return@launchLayoutEdit
+            if (item.type !in setOf(ItemType.APP, ItemType.FOLDER)) return@launchLayoutEdit
+            if (pageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == pageId }) return@launchLayoutEdit
+            val settings = settingsRepository.settings.first()
+            val compactCell = snapshot.freeFolderCell(pageId, false, settings.compactGridColumns, settings.compactGridRows,
+                preferred.takeUnless { expanded })
+            val expandedCell = snapshot.freeFolderCell(pageId, true, settings.expandedGridColumns, settings.expandedGridRows,
+                preferred.takeIf { expanded })
+            if (compactCell == null || expandedCell == null) {
+                Toast.makeText(container.appContext, "ホームに空きがありません", Toast.LENGTH_SHORT).show()
+                return@launchLayoutEdit
+            }
+            val home = item.asLayoutItem(pageId).copy(compact = compactCell, expanded = expandedCell)
+            layoutRepository.restoreLayoutSnapshot(snapshot.copy(items = snapshot.items + home,
+                dockItems = snapshot.dockItems.filterNot { it.id == id }.mapIndexed { i, entry -> entry.copy(positionIndex = i) }))
+        }
+    }
+
+    fun extractFolderApp(id: String, memberId: String, toDock: Boolean) = runIfUnlocked {
+        enterEditMode()
+        launchLayoutEdit { snapshot ->
+            val folder = snapshot.folder(id) ?: return@launchLayoutEdit
+            val app = folder.folderApps.find { it.id == memberId } ?: return@launchLayoutEdit
+            val remaining = snapshot.withFolderApps(id, folder.folderApps.filterNot { it.id == memberId })
+            val settings = settingsRepository.settings.first()
+            val updated = if (toDock) {
+                if (remaining.dockItems.size >= settings.effectiveDockIconCount) null
+                else remaining.copy(dockItems = remaining.dockItems + DockItem(UUID.randomUUID().toString(), remaining.dockItems.size,
+                    ItemType.APP, app.packageName, app.activityName, label = app.label))
+            } else {
+                val pageId = snapshot.items.find { it.id == id }?.pageId ?: LauncherPage.PAGE_ID_HOME
+                val compact = remaining.freeFolderCell(pageId, false, settings.compactGridColumns, settings.compactGridRows)
+                val expanded = remaining.freeFolderCell(pageId, true, settings.expandedGridColumns, settings.expandedGridRows)
+                if (compact == null || expanded == null) null else remaining.copy(items = remaining.items +
+                    LayoutItem(UUID.randomUUID().toString(), pageId, ItemType.APP, app.packageName, app.activityName, label = app.label,
+                        compact = compact, expanded = expanded))
+            }
+            if (updated == null) Toast.makeText(container.appContext, "取り出し先に空きがありません", Toast.LENGTH_SHORT).show()
+            else layoutRepository.restoreLayoutSnapshot(updated)
+        }
+    }
+
     fun moveLayoutItem(
         item: LayoutItem,
         newPosition: GridPosition,
@@ -1306,6 +1405,17 @@ class LauncherViewModel(
         launchLayoutEdit { snapshot ->
             val item = snapshot.items.find { it.id == item.id } ?: return@launchLayoutEdit
             if (targetPageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == targetPageId }) return@launchLayoutEdit
+            if (item.type == ItemType.FOLDER && targetPageId != item.pageId) {
+                val settings = settingsRepository.settings.first()
+                val compact = snapshot.freeFolderCell(targetPageId, false, settings.compactGridColumns, settings.compactGridRows,
+                    newPosition.takeUnless { isExpandedMode })
+                val expanded = snapshot.freeFolderCell(targetPageId, true, settings.expandedGridColumns, settings.expandedGridRows,
+                    newPosition.takeIf { isExpandedMode })
+                if (compact == null || expanded == null) {
+                    Toast.makeText(container.appContext, "移動先に空きがありません", Toast.LENGTH_SHORT).show()
+                } else layoutRepository.upsertLayoutItem(item.copy(pageId = targetPageId, compact = compact, expanded = expanded))
+                return@launchLayoutEdit
+            }
             val state = layoutState(snapshot)
             val cols = if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns
             val rows = if (isExpandedMode) state.settings.expandedGridRows else state.settings.compactGridRows
@@ -1318,6 +1428,13 @@ class LauncherViewModel(
                 y = newPosition.y.coerceIn(0, (rows - spanY).coerceAtLeast(0))
             )
 
+            if (item.type == ItemType.FOLDER && snapshot.items.any {
+                it.id != item.id && it.pageId == targetPageId && (it.spanX > 1 || it.spanY > 1) &&
+                    clampedTarget in it.occupiedCells(isExpandedMode, cols, rows)
+            }) {
+                Toast.makeText(container.appContext, "ウィジェット上には移動できません", Toast.LENGTH_SHORT).show()
+                return@launchLayoutEdit
+            }
             if (targetPageId == item.pageId) {
                 // 同一ページ内の移動：1×1 アイテム同士で移動先セルに別の 1×1 アイテムがある場合は位置をスワップ
                 if (spanX == 1 && spanY == 1) {
@@ -1367,6 +1484,18 @@ class LauncherViewModel(
             } else {
                 if (targetPageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == targetPageId }) return@launchLayoutEdit
                 targetPageId
+            }
+            if (item.type == ItemType.FOLDER) {
+                val settings = settingsRepository.settings.first()
+                val compact = snapshot.freeFolderCell(destinationPageId, false, settings.compactGridColumns, settings.compactGridRows)
+                val expanded = snapshot.freeFolderCell(destinationPageId, true, settings.expandedGridColumns, settings.expandedGridRows)
+                if (compact == null || expanded == null) {
+                    Toast.makeText(container.appContext, "移動先に空きがありません", Toast.LENGTH_SHORT).show()
+                } else {
+                    layoutRepository.upsertLayoutItem(item.copy(pageId = destinationPageId, compact = compact, expanded = expanded))
+                    _pageNavigationEvents.tryEmit(destinationPageId)
+                }
+                return@launchLayoutEdit
             }
             val state = layoutState(snapshot)
             val cols = if (isExpandedMode) state.settings.expandedGridColumns else state.settings.compactGridColumns

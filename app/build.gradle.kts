@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 37
-        versionName = "1.3.7"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-05\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"Discoverの記事から戻る際、元の独自フィード・Google Discoverへ一度だけ復帰。HOME・戻る操作の受信継続を修正。All Appsページの表示を切り替え可能に。フィード設定画面で6種類の独自フィードを個別にON・OFFでき、再起動やバックアップ復元後も設定を保持します。\"")
+        versionCode = 38
+        versionName = "1.3.8-preview.1"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-06\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"ホームとDockのフォルダ作成・名前変更・アプリ追加／取り出しに対応。フォルダをドラッグしてページ間・Dock内・ホームとDockの間で移動でき、保存・バックアップ・Undoでも内容を保持します。All Appsは全アプリのフラットな一覧を維持します。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

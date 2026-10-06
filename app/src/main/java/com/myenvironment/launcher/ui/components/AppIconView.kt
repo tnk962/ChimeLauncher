@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
+import com.myenvironment.launcher.core.model.FolderApp
 import com.myenvironment.launcher.core.model.ItemType
 import com.myenvironment.launcher.core.model.LauncherAction
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +58,8 @@ fun LauncherItemGraphic(
     iconSize: Dp = 48.dp,
     showLabel: Boolean = true,
     isEditMode: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    folderApps: List<FolderApp> = emptyList()
 ) {
     // 1. まずメモリキャッシュから同期的に即座に取得（0ms）
     val cachedInitial = remember(packageName, activityName, isInstalled) {
@@ -90,6 +93,21 @@ fun LauncherItemGraphic(
             modifier = Modifier.size(iconSize)
         ) {
             when {
+                type == ItemType.FOLDER -> {
+                    Column(Modifier.size(iconSize).clip(RoundedCornerShape(12.dp)).background(Color(0xCC29354A)).padding(3.dp)) {
+                        repeat(2) { row ->
+                            Row {
+                                repeat(2) { column ->
+                                    val app = folderApps.getOrNull(row * 2 + column)
+                                    if (app == null) Box(Modifier.size((iconSize - 6.dp) / 2))
+                                    else LauncherItemGraphic(ItemType.APP, app.packageName, app.activityName, "", app.label,
+                                        appDiscoveryRepository.isPackageInstalled(app.packageName), appDiscoveryRepository,
+                                        iconSize = (iconSize - 6.dp) / 2, showLabel = false)
+                                }
+                            }
+                        }
+                    }
+                }
                 // 1. 未インストールアプリの Placeholder 表示 (仕様 24)
                 !isInstalled && type == ItemType.APP -> {
                     Box(

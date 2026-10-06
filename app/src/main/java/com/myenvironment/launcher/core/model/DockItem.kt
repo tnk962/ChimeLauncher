@@ -14,5 +14,6 @@ data class DockItem(
     val packageName: String,
     val activityName: String = "",
     val targetUri: String = "",
-    val label: String
+    val label: String,
+    val folderApps: List<FolderApp> = emptyList()
 )
