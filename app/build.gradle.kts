@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 37
-        versionName = "1.3.7"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-05\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"Discoverの記事から戻る際、元の独自フィード・Google Discoverへ一度だけ復帰。HOME・戻る操作の受信継続を修正。All Appsページの表示を切り替え可能に。フィード設定画面で6種類の独自フィードを個別にON・OFFでき、再起動やバックアップ復元後も設定を保持します。\"")
+        versionCode = 42
+        versionName = "1.3.8"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-06\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"拡大フォルダ内のスクロールで検索・通知を開かないように修正。中のアイコンを小さく中央へ寄せ、黒い余白のタップでもフォルダを開けます。Foldを展開したまま起動・更新すると落ちるページ参照を修正。フォルダは開くとアプリ一覧、長押しで編集・取り出し。検索終了とアプリからの復帰では現在ページを維持します。All Appsはフラットな一覧です。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

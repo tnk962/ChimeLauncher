@@ -54,6 +54,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.PointerEventPass
+import kotlin.math.abs
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInParent
@@ -136,6 +139,9 @@ fun SearchOverlay(
     val listState = rememberLazyListState()
     var indexJumpJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
+    val dismissSearch by rememberUpdatedState { keyboardController?.hide(); onDismiss() }
+    val indexWidthPx = with(LocalDensity.current) { 28.dp.toPx() }
+    val indexLeftPx by rememberUpdatedState(fieldRightPx?.minus(indexWidthPx) ?: Float.MAX_VALUE)
     val indexedApps = remember(installedApps) { AppListIndex.sorted(installedApps) }
     LaunchedEffect(listState, keyboardController) {
         listState.interactionSource.interactions.collect { interaction ->
@@ -159,6 +165,29 @@ fun SearchOverlay(
             .fillMaxSize()
             .statusBarsPadding()
             .imePadding()
+            .pointerInput(listState) {
+                // Only a downward pull starting at the top closes search. Normal list scrolling
+                // and the right-hand index keep their own gesture handlers.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    if (listState.canScrollBackward || down.position.x >= indexLeftPx) return@awaitEachGesture
+                    var dismissing = false
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (event.changes.count { it.pressed } > 1) break
+                        val delta = change.position - down.position
+                        if (delta.y < -viewConfiguration.touchSlop || abs(delta.x) > viewConfiguration.touchSlop && abs(delta.x) > abs(delta.y)) break
+                        if (change.uptimeMillis - down.uptimeMillis > 450 && delta.getDistance() < viewConfiguration.touchSlop) break
+                        if (delta.y >= 64.dp.toPx() && delta.y >= abs(delta.x) * 2) dismissing = true
+                        if (dismissing) change.consume()
+                        if (!change.pressed) {
+                            if (dismissing) dismissSearch()
+                            break
+                        }
+                    }
+                }
+            }
     ) {
         Column(
             modifier = Modifier

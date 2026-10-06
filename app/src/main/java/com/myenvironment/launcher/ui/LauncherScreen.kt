@@ -1,5 +1,7 @@
 package com.myenvironment.launcher.ui
 
+import com.myenvironment.launcher.core.model.asLayoutItem
+import com.myenvironment.launcher.ui.folder.FolderDialog
 import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
@@ -340,6 +342,8 @@ fun LauncherScreen(
     val dragController = remember { LauncherDragController() }
     val keyboardController = LocalSoftwareKeyboardController.current
     var isSecondFingerPaging by remember { mutableStateOf(false) }
+    var dragStartedInEditMode by remember { mutableStateOf(false) }
+    var edgePagingInProgress by remember { mutableStateOf(false) }
     // Layout changes invalidate both geometry and the drag's original grab offset.
     LaunchedEffect(adaptiveSpec, uiState.settings.expandedPageLayoutMode, uiState.settings.layoutLocked) {
         activeDragState = null
@@ -353,8 +357,7 @@ fun LauncherScreen(
      */
     fun resolveDropTarget(drag: CrossPageDragState): Triple<String, HomePageGridMetrics, GridPosition>? {
         val sourceMetrics = pageMetricsMap[drag.sourcePageId]
-        if (drag.origin == DragOrigin.DOCK) return null
-        if (drag.isAppAddition) {
+        if (drag.isAppAddition || drag.origin == DragOrigin.DOCK) {
             val visibleIds = if (isDualPageMode) {
                 dualSlots.getOrNull(dualPagerState.currentPage)?.visiblePageIds.orEmpty()
             } else listOfNotNull(pages.getOrNull(singlePagerState.currentPage)?.id)
@@ -420,7 +423,7 @@ fun LauncherScreen(
     val currentDrag = activeDragState
     val edgeHoverDirection: Int = when {
         currentDrag == null || currentDrag.origin != DragOrigin.HOME || isSecondFingerPaging ||
-            singlePagerState.isScrollInProgress || dualPagerState.isScrollInProgress || pagerBoundsInRoot.width <= 0f -> 0
+            ((singlePagerState.isScrollInProgress || dualPagerState.isScrollInProgress) && !edgePagingInProgress) || pagerBoundsInRoot.width <= 0f -> 0
         currentDrag.fingerInRoot.x <= pagerBoundsInRoot.left + edgeHoverZonePx -> -1
         currentDrag.fingerInRoot.x >= pagerBoundsInRoot.right - edgeHoverZonePx -> 1
         else -> 0
@@ -471,9 +474,7 @@ fun LauncherScreen(
     LaunchedEffect(
         activeDragState != null,
         edgeHoverDirection,
-        isDualPageMode,
-        singlePagerState.currentPage,
-        dualPagerState.currentPage
+        isDualPageMode
     ) {
         if (activeDragState == null || edgeHoverDirection == 0 || edgeTransitionHint == null) {
             return@LaunchedEffect
@@ -482,70 +483,76 @@ fun LauncherScreen(
         delay(650L)
         if (activeDragState == null) return@LaunchedEffect
 
-        if (isDualPageMode) {
-            val curSlotIdx = dualPagerState.currentPage
-            if (edgeHoverDirection < 0) {
-                val targetSlotIdx = curSlotIdx - 1
-                val prevSlot = dualSlots.getOrNull(targetSlotIdx)
-                val hasHome = prevSlot?.visiblePageIds?.any { id ->
-                    pages.find { it.id == id }?.isEditableHomePage() == true
-                } == true
-                if (hasHome) {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    dualPagerState.animateScrollToPage(targetSlotIdx)
-                }
-            } else {
-                val targetSlotIdx = curSlotIdx + 1
-                val nextSlot = dualSlots.getOrNull(targetSlotIdx)
-                val hasHome = nextSlot?.visiblePageIds?.any { id ->
-                    pages.find { it.id == id }?.isEditableHomePage() == true
-                } == true
-                if (hasHome) {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    dualPagerState.animateScrollToPage(targetSlotIdx)
-                } else {
-                    // 右端の最終ページでさらに右端ホバーした場合は新規ページを作成して遷移
-                    val created = viewModel.createUserPageForDrag()
-                    if (created != null) {
+        // Scrolling/page changes caused by this animation must not cancel its own effect.
+        edgePagingInProgress = true
+        try {
+            if (isDualPageMode) {
+                val curSlotIdx = dualPagerState.currentPage
+                if (edgeHoverDirection < 0) {
+                    val targetSlotIdx = curSlotIdx - 1
+                    val prevSlot = dualSlots.getOrNull(targetSlotIdx)
+                    val hasHome = prevSlot?.visiblePageIds?.any { id ->
+                        pages.find { it.id == id }?.isEditableHomePage() == true
+                    } == true
+                    if (hasHome) {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        focusedPageId = created.id
-                        delay(80L)
-                        val updatedSlots = buildExpandedDualSlots(viewModel.uiState.value.pages)
-                        val newSlotIdx = resolveExpandedDualSlotIndex(updatedSlots, created.id)
-                        dualPagerState.animateScrollToPage(newSlotIdx)
+                        dualPagerState.animateScrollToPage(targetSlotIdx)
+                    }
+                } else {
+                    val targetSlotIdx = curSlotIdx + 1
+                    val nextSlot = dualSlots.getOrNull(targetSlotIdx)
+                    val hasHome = nextSlot?.visiblePageIds?.any { id ->
+                        pages.find { it.id == id }?.isEditableHomePage() == true
+                    } == true
+                    if (hasHome) {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        dualPagerState.animateScrollToPage(targetSlotIdx)
+                    } else {
+                        // 右端の最終ページでさらに右端ホバーした場合は新規ページを作成して遷移
+                        val created = viewModel.createUserPageForDrag()
+                        if (created != null) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            focusedPageId = created.id
+                            delay(80L)
+                            val updatedSlots = buildExpandedDualSlots(viewModel.uiState.value.pages)
+                            val newSlotIdx = resolveExpandedDualSlotIndex(updatedSlots, created.id)
+                            dualPagerState.animateScrollToPage(newSlotIdx)
+                        }
                     }
                 }
-            }
-        } else {
-            val curIdx = singlePagerState.currentPage
-            if (edgeHoverDirection < 0) {
-                val targetIdx = curIdx - 1
-                val prevPage = pages.getOrNull(targetIdx)?.takeIf { it.isEditableHomePage() }
-                if (prevPage != null) {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    singlePagerState.animateScrollToPage(targetIdx)
-                }
             } else {
-                val targetIdx = curIdx + 1
-                val nextPage = pages.getOrNull(targetIdx)
-                if (nextPage != null && nextPage.isEditableHomePage()) {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    singlePagerState.animateScrollToPage(targetIdx)
-                } else {
-                    // 右端の最終ホームページでさらに右端ホバーした場合は新規ページを作成して遷移
-                    val created = viewModel.createUserPageForDrag()
-                    if (created != null) {
+                val curIdx = singlePagerState.currentPage
+                if (edgeHoverDirection < 0) {
+                    val targetIdx = curIdx - 1
+                    val prevPage = pages.getOrNull(targetIdx)?.takeIf { it.isEditableHomePage() }
+                    if (prevPage != null) {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        focusedPageId = created.id
-                        delay(80L)
-                        val updatedPages = viewModel.uiState.value.pages
-                        val newIdx = updatedPages.indexOfFirst { it.id == created.id }
-                        if (newIdx >= 0) {
-                            singlePagerState.animateScrollToPage(newIdx)
+                        singlePagerState.animateScrollToPage(targetIdx)
+                    }
+                } else {
+                    val targetIdx = curIdx + 1
+                    val nextPage = pages.getOrNull(targetIdx)
+                    if (nextPage != null && nextPage.isEditableHomePage()) {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        singlePagerState.animateScrollToPage(targetIdx)
+                    } else {
+                        // 右端の最終ホームページでさらに右端ホバーした場合は新規ページを作成して遷移
+                        val created = viewModel.createUserPageForDrag()
+                        if (created != null) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            focusedPageId = created.id
+                            delay(80L)
+                            val updatedPages = viewModel.uiState.value.pages
+                            val newIdx = updatedPages.indexOfFirst { it.id == created.id }
+                            if (newIdx >= 0) {
+                                singlePagerState.animateScrollToPage(newIdx)
+                            }
                         }
                     }
                 }
             }
+        } finally {
+            edgePagingInProgress = false
         }
     }
 
@@ -682,6 +689,7 @@ fun LauncherScreen(
     // Let dialogs keep their own dismissal handlers instead of finishing the launcher Activity.
     BackHandler {
         when {
+            uiState.overlay.activeFolderId != null -> viewModel.closeFolder()
             activeDragState != null -> activeDragState = null
             (overlayState?.progress ?: 0f) > 0f -> googleOverlay?.close()
             uiState.overlay.resizingWidgetTarget != null -> viewModel.dismissResizeWidgetDialog()
@@ -709,11 +717,43 @@ fun LauncherScreen(
             .firstOrNull { (_, bounds) -> if (vertical) finger.y < bounds.center.y else finger.x < bounds.center.x }
             ?.key ?: uiState.dockItems.size
     }
+    fun folderTarget(drag: CrossPageDragState): String? {
+        if (drag.item.type != ItemType.APP) return null
+        if (dockBoundsInRoot.contains(drag.fingerInRoot)) {
+            val visibleCount = minOf(uiState.dockItems.size, uiState.settings.effectiveDockIconCount)
+            val slot = dockSlotBounds.entries.filter { it.key < visibleCount }.firstOrNull { (_, bounds) ->
+                kotlin.math.abs(drag.fingerInRoot.x - bounds.center.x) < bounds.width * 0.28f &&
+                    kotlin.math.abs(drag.fingerInRoot.y - bounds.center.y) < bounds.height * 0.28f
+            } ?: return null
+            return uiState.dockItems.getOrNull(slot.key)?.takeIf {
+                it.id != drag.item.id && it.type in setOf(ItemType.APP, ItemType.FOLDER)
+            }?.id
+        }
+        val target = resolveDropTarget(drag) ?: return null
+        val metrics = target.second
+        val centerX = metrics.boundsInRoot.left + (target.third.x + 0.5f) * metrics.cellWidthPx
+        val centerY = metrics.boundsInRoot.top + (target.third.y + 0.5f) * metrics.cellHeightPx
+        if (kotlin.math.abs(drag.fingerInRoot.x - centerX) > metrics.cellWidthPx * 0.28f ||
+            kotlin.math.abs(drag.fingerInRoot.y - centerY) > metrics.cellHeightPx * 0.28f) return null
+        return uiState.layoutItems.firstOrNull {
+            it.pageId == target.first && it.id != drag.item.id && it.type in setOf(ItemType.APP, ItemType.FOLDER) &&
+                target.third in it.occupiedCells(metrics.isExpanded, metrics.columns, metrics.rows)
+        }?.id
+    }
+
     val handleDragEnd: (CrossPageDragState) -> Unit = { finalState ->
         if (activeDragState != null) {
-            if (finalState.origin == DragOrigin.DOCK) {
+            val folderId = folderTarget(finalState)
+            if (folderId != null) {
+                viewModel.groupAppIntoFolder(finalState.item, finalState.origin == DragOrigin.DOCK, finalState.isAppAddition, folderId)
+            } else if (finalState.origin == DragOrigin.DOCK) {
                 if (dockBoundsInRoot.contains(finalState.fingerInRoot)) {
                     viewModel.reorderDockItemByDrop(finalState.item.id, dockInsertionIndex(finalState.fingerInRoot))
+                } else {
+                    val target = resolveDropTarget(finalState)
+                    if (target != null && target.second.boundsInRoot.contains(finalState.fingerInRoot)) {
+                        viewModel.moveDockItemToHome(finalState.item.id, target.first, target.third, target.second.isExpanded)
+                    }
                 }
             } else if (finalState.isAppAddition) {
                 val app = uiState.installedApps.find {
@@ -727,6 +767,9 @@ fun LauncherScreen(
                         viewModel.addSearchAppToHome(app, target.first, target.third, target.second.isExpanded)
                     }
                 }
+            } else if (dockBoundsInRoot.contains(finalState.fingerInRoot) &&
+                finalState.item.type in setOf(ItemType.APP, ItemType.FOLDER)) {
+                viewModel.moveHomeItemToDock(finalState.item.id, dockInsertionIndex(finalState.fingerInRoot))
             } else {
                 val resolved = resolveDropTarget(finalState)
                 if (resolved != null && resolved.second.boundsInRoot.contains(finalState.fingerInRoot) &&
@@ -763,6 +806,7 @@ fun LauncherScreen(
                         viewModel.enterEditMode()
                         false
                     } else {
+                        dragStartedInEditMode = uiState.overlay.isEditMode
                         viewModel.enterEditMode()
                         activeDragState = state
                         if (state.isAppAddition && !currentPage.isEditableHomePage()) {
@@ -796,7 +840,7 @@ fun LauncherScreen(
         val mainArea: @Composable (Modifier) -> Unit = { areaModifier ->
             Column(modifier = areaModifier.then(googleOnlyEdgeModifier)) {
                 EditModeBanner(
-                    visible = uiState.overlay.isEditMode,
+                    visible = uiState.overlay.isEditMode && (activeDragState == null || dragStartedInEditMode),
                     currentPage = currentPage,
                     onAddApp = { viewModel.requestAddItemToPage(currentPage, initialTab = 0) },
                     onAddWidget = { viewModel.requestAddItemToPage(currentPage, initialTab = 1) },
@@ -813,7 +857,7 @@ fun LauncherScreen(
                     // 左右2ページ見開きモード（Discover・All Apps・設定は1ページ全画面固定、他は左右2ページ見開き）
                     HorizontalPager(
                         state = dualPagerState,
-                        key = { index -> dualSlots[index].visiblePageIds.sorted().joinToString("|") },
+                        key = { index -> dualPagerKey(dualSlots, index) },
                         beyondViewportPageCount = dualSlots.size.coerceAtLeast(1),
                         userScrollEnabled = activeDragState == null,
                         modifier = Modifier
@@ -903,7 +947,7 @@ fun LauncherScreen(
                     // Expanded 1ページ全画面表示モード
                     HorizontalPager(
                         state = singlePagerState,
-                        key = { index -> pages[index].id },
+                        key = { index -> singlePagerKey(pages, index) },
                         beyondViewportPageCount = pages.size.coerceAtLeast(1),
                         userScrollEnabled = activeDragState == null,
                         modifier = Modifier
@@ -964,7 +1008,7 @@ fun LauncherScreen(
                 installedPackages = uiState.installedPackages,
                 placement = adaptiveSpec.dockPlacement,
                 iconCount = uiState.settings.effectiveDockIconCount,
-                isEditMode = uiState.overlay.isEditMode,
+                isEditMode = uiState.overlay.isEditMode && (activeDragState == null || dragStartedInEditMode),
                 appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
                 onDockItemClick = { item, isInstalled ->
                     viewModel.onDockItemClicked(item, isInstalled)
@@ -973,7 +1017,7 @@ fun LauncherScreen(
                 onMoveDockItem = { item, delta -> viewModel.moveDockItem(item, delta) },
                 onRequestAddDockItem = { viewModel.requestAddItemToDock() },
                 onSlotBounds = { index, bounds -> dockSlotBounds[index] = bounds },
-                isDropHovered = activeDragState?.let { (it.isAppAddition || it.origin == DragOrigin.DOCK) && dockBoundsInRoot.contains(it.fingerInRoot) } == true,
+                isDropHovered = activeDragState?.let { it.item.type in setOf(ItemType.APP, ItemType.FOLDER) && dockBoundsInRoot.contains(it.fingerInRoot) } == true,
                 modifier = Modifier.onGloballyPositioned { dockBoundsInRoot = it.boundsInRoot() }
             )
         }
@@ -1051,7 +1095,8 @@ fun LauncherScreen(
             ) {
                 Text(
                     text = edgeTransitionHint
-                        ?: if ((drag.isAppAddition || drag.origin == DragOrigin.DOCK) && dockBoundsInRoot.contains(drag.fingerInRoot)) {
+                        ?: if (folderTarget(drag) != null) "フォルダを作成 / アプリを追加"
+                        else if (drag.item.type in setOf(ItemType.APP, ItemType.FOLDER) && dockBoundsInRoot.contains(drag.fingerInRoot)) {
                             if (drag.origin == DragOrigin.DOCK) {
                                 val reordered = reorderDockByInsertion(uiState.dockItems, drag.item.id, dockInsertionIndex(drag.fingerInRoot))
                                 "Dock: ${reordered.indexOfFirst { it.id == drag.item.id } + 1}番目へ移動"
@@ -1118,6 +1163,7 @@ fun LauncherScreen(
                 } else {
                     LauncherItemGraphic(
                         type = drag.item.type,
+                        folderApps = drag.item.folderApps,
                         packageName = drag.item.packageName,
                         activityName = drag.item.activityName,
                         targetUri = drag.item.targetUri,
@@ -1211,6 +1257,27 @@ fun LauncherScreen(
         }
 
         // 3. 空白長押し「ホーム画面を編集」シート (仕様 13)
+        val activeFolder = uiState.overlay.activeFolderId?.let { id ->
+            uiState.layoutItems.find { it.id == id && it.type == ItemType.FOLDER }
+                ?: uiState.dockItems.find { it.id == id && it.type == ItemType.FOLDER }?.asLayoutItem()
+        }
+        LaunchedEffect(uiState.overlay.activeFolderId, activeFolder?.id) {
+            if (uiState.overlay.activeFolderId != null && activeFolder == null) viewModel.closeFolder()
+        }
+        if (activeFolder != null) {
+            FolderDialog(
+                folder = activeFolder, installedApps = uiState.installedApps,
+                repository = viewModel.container.appDiscoveryRepository, locked = uiState.settings.layoutLocked,
+                onDismiss = viewModel::closeFolder,
+                onBeginEdit = viewModel::enterEditMode,
+                onEndEdit = viewModel::exitEditMode,
+                onRename = { viewModel.renameFolder(activeFolder.id, it) },
+                onLaunch = { viewModel.launchFolderApp(activeFolder.id, it) },
+                onAdd = { viewModel.addAppToFolder(activeFolder.id, it) },
+                onExtract = { app, toDock -> viewModel.extractFolderApp(activeFolder.id, app.id, toDock) }
+            )
+        }
+
         if (uiState.overlay.isHomeEditSheetOpen) {
             HomeEditSheet(
                 isLayoutLocked = uiState.settings.layoutLocked,
@@ -1292,8 +1359,8 @@ fun LauncherScreen(
             }
             WidgetResizeDialog(
                 item = resizingWidget,
-                maxColumns = maxCols,
-                maxRows = maxRows,
+                maxColumns = if (resizingWidget.type == ItemType.FOLDER) minOf(uiState.settings.compactGridColumns, uiState.settings.expandedGridColumns) else maxCols,
+                maxRows = if (resizingWidget.type == ItemType.FOLDER) minOf(uiState.settings.compactGridRows, uiState.settings.expandedGridRows) else maxRows,
                 onConfirmResize = { newSpanX, newSpanY ->
                     viewModel.resizeWidgetItem(
                         item = resizingWidget,
@@ -1543,6 +1610,7 @@ private fun LauncherPageContent(
                 isEditMode = uiState.overlay.isEditMode,
                 appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
                 widgetHostManager = viewModel.widgetHostManager,
+                onFolderAppClick = { folder, app -> viewModel.launchFolderApp(folder.id, app) },
                 onItemClick = { item, isInstalled ->
                     viewModel.onLayoutItemClicked(item, isInstalled)
                 },

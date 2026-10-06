@@ -71,7 +71,8 @@ class JsonBackupManager(
                         expanded = item.expanded,
                         spanX = item.spanX,
                         spanY = item.spanY,
-                        appWidgetId = item.appWidgetId
+                        appWidgetId = item.appWidgetId,
+                        folderApps = item.folderApps
                     )
                 }
             BackupPage(
@@ -216,7 +217,8 @@ class JsonBackupManager(
                         expanded = bItem.expanded,
                         spanX = bItem.spanX.coerceAtLeast(1),
                         spanY = bItem.spanY.coerceAtLeast(1),
-                        appWidgetId = bItem.appWidgetId
+                        appWidgetId = bItem.appWidgetId,
+                        folderApps = bItem.folderApps
                     )
                 )
             }

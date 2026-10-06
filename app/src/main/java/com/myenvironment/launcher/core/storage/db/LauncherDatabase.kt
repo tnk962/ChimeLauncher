@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DockItemEntity::class,
         BackupSnapshotEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class LauncherDatabase : RoomDatabase() {
@@ -31,6 +31,13 @@ abstract class LauncherDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE layout_items ADD COLUMN folderAppsJson TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE dock_items ADD COLUMN folderAppsJson TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
         @Volatile
         private var instance: LauncherDatabase? = null
 
@@ -41,7 +48,7 @@ abstract class LauncherDatabase : RoomDatabase() {
                     LauncherDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }

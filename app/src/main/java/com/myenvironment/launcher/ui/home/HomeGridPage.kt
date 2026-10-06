@@ -28,6 +28,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -45,6 +47,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
 import com.myenvironment.launcher.core.model.GridPosition
+import com.myenvironment.launcher.core.model.FolderApp
+import com.myenvironment.launcher.ui.folder.ExpandedFolderView
 import com.myenvironment.launcher.core.model.ItemType
 import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.core.model.LayoutItem
@@ -123,6 +127,7 @@ fun HomeGridPage(
     appDiscoveryRepository: AppDiscoveryRepository,
     widgetHostManager: WidgetHostManager,
     onItemClick: (LayoutItem, Boolean) -> Unit,
+    onFolderAppClick: (LayoutItem, FolderApp) -> Unit,
     onBlankLongPress: (GridPosition) -> Unit,
     onRequestAddAtCell: (GridPosition) -> Unit,
     onMoveItem: (LayoutItem, GridPosition) -> Unit,
@@ -292,7 +297,8 @@ fun HomeGridPage(
             // 1.5. ドラッグ中のドロップ予定セル範囲ハイライト（ページ内・ページ跨ぎ共通）
             if (activeDragState != null && highlightedDropCell != null) {
                 val dropColor = if (activeDragState.isAppAddition && items.any {
-                    highlightedDropCell in it.occupiedCells(isExpanded, safeCols, safeRows)
+                    highlightedDropCell in it.occupiedCells(isExpanded, safeCols, safeRows) &&
+                        it.type !in setOf(ItemType.APP, ItemType.FOLDER)
                 }) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 val dropSpanX = activeDragState.spanX.coerceIn(1, safeCols)
                 val dropSpanY = activeDragState.spanY.coerceIn(1, safeRows)
@@ -330,7 +336,7 @@ fun HomeGridPage(
                 val isInstalled = when (item.type) {
                     ItemType.APP, ItemType.WIDGET -> installedPackages.contains(item.packageName) ||
                         appDiscoveryRepository.isPackageInstalled(item.packageName)
-                    ItemType.SHORTCUT, ItemType.ACTION -> true
+                    ItemType.SHORTCUT, ItemType.ACTION, ItemType.FOLDER -> true
                 }
 
                 val isBeingDragged = activeDragState?.item?.id == item.id
@@ -375,7 +381,7 @@ fun HomeGridPage(
                         )
                         .launcherDragSource(
                             key = "home:${page.id}:${item.id}", origin = DragOrigin.HOME,
-                            enabled = isEditMode, afterLongPress = false,
+                            enabled = isEditMode || item.type != ItemType.WIDGET, afterLongPress = !isEditMode,
                             onLongPressRelease = { activeMenuItem = item },
                             createState = { finger ->
                                 val coords = itemBoxCoords
@@ -393,16 +399,18 @@ fun HomeGridPage(
                             if (item.type != ItemType.WIDGET || isEditMode) {
                                 Modifier.combinedClickable(
                                     onClick = {
-                                        if (isEditMode) {
+                                        if (isEditMode && item.type != ItemType.FOLDER) {
                                             selectedItemForMove = if (isSelectedForMove) null else item
                                         } else {
                                             onItemClick(item, isInstalled)
                                         }
                                     },
-                                    onLongClick = if (isEditMode) null else {
-                                        { activeMenuItem = item }
-                                    }
-                                )
+                                    // The root drag host opens the menu on release without movement.
+                                    // A child long-click timer would open a popup before dragging can begin.
+                                    onLongClick = null
+                                ).semantics {
+                                    onLongClick("ホームのメニュー") { activeMenuItem = item; true }
+                                }
                             } else {
                                 Modifier
                             }
@@ -424,9 +432,15 @@ fun HomeGridPage(
                             onMissingWidgetClick = { onItemClick(it, false) },
                             onSilentAutoRebindAttempt = { onSilentAutoRebindWidget(it) }
                         )
+                    } else if (item.type == ItemType.FOLDER && (effectiveSpanX > 1 || effectiveSpanY > 1)) {
+                        ExpandedFolderView(item, appDiscoveryRepository,
+                            onOpen = { onItemClick(item, true) },
+                            onLaunch = { onFolderAppClick(item, it) },
+                            modifier = Modifier.fillMaxSize())
                     } else {
                         LauncherItemGraphic(
                             type = item.type,
+                            folderApps = item.folderApps,
                             packageName = item.packageName,
                             activityName = item.activityName,
                             targetUri = item.targetUri,
@@ -485,6 +499,10 @@ fun HomeGridPage(
                                 }
                             }
                         )
+                        if (item.type == ItemType.FOLDER) {
+                            DropdownMenuItem(text = { Text("📐 サイズを変更 (${effectiveSpanX}×${effectiveSpanY})") },
+                                onClick = { activeMenuItem = null; onResizeWidgetRequest(item) })
+                        }
                         if (item.type == ItemType.WIDGET) {
                             DropdownMenuItem(
                                 text = { Text("📐 サイズを変更 (${effectiveSpanX}×${effectiveSpanY})") },
@@ -592,7 +610,8 @@ internal fun isTouchInsideScrollableWidget(
     val safeRows = rows.coerceAtLeast(1)
 
     for (item in items) {
-        if (item.type != ItemType.WIDGET) continue
+        val expandedFolder = item.type == ItemType.FOLDER && (item.spanX > 1 || item.spanY > 1)
+        if (item.type != ItemType.WIDGET && !expandedFolder) continue
         val spanX = item.resolveSpanX(safeCols)
         val spanY = item.resolveSpanY(safeRows)
         val pos = item.resolveClampedPosition(
@@ -606,7 +625,7 @@ internal fun isTouchInsideScrollableWidget(
         val bottom = (pos.y + spanY) * cellHeightPx
 
         if (touchOffset.x in left..right && touchOffset.y in top..bottom) {
-            if (isWidgetScrollable(item)) {
+            if (expandedFolder || isWidgetScrollable(item)) {
                 return true
             }
         }

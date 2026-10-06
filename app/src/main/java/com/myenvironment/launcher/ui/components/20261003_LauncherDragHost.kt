@@ -179,8 +179,8 @@ fun Modifier.launcherDragHost(
                             }
                         }
                     }
-                    // Do not steal a scroll/tap already claimed by a child before our drag begins.
-                    if (!dragging) {
+                    // Honor child scrolling/taps until long-press ownership or dragging begins.
+                    if (!dragging && !longPressed) {
                         val final = awaitPointerEvent(PointerEventPass.Final)
                         if (final.changes.any { it.id == down.id && it.isConsumed }) break
                     }
