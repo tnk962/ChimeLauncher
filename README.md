@@ -1,12 +1,11 @@
 # Chime Launcher (v1.3.8)
 
-## 操作マニュアル（v1.3.5）
-
-[画像付き操作マニュアルを読む](docs/20261004_chimelauncher-user-manual.md) — GitHub上で本文・画像・目次をそのまま読めます。
+現行版の操作マニュアル（v1.3.8）<br>
+[画像付き操作マニュアルを読む](docs/20261006_chimelauncher-user-manual.md) — GitHub上で本文・画像・目次をそのまま読めます。
 
 ---
 
-[正式版v1.3.8](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.8)向けの実装です。本体は **Build 42**、Chime Discover Companionは **Build 12**。フォルダ機能と修正はpreview.4でユーザーの実機確認OKを受領しました。画像付き操作マニュアルはv1.3.5時点の画面を掲載しています。以後の変更は下記と[CHANGELOG](CHANGELOG.md)を参照してください。
+[正式版v1.3.8](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.8)向けの実装です。本体は **Build 42**、Chime Discover Companionは **Build 12**。フォルダ機能と修正はpreview.4でユーザーの実機確認OKを受領しました。画像付き操作マニュアルとPDFをv1.3.8に更新しました。変更のない基本操作の旧画像は撮影版を明記して掲載しています。
 
 v1.3.7では、設定の「ページ・フィード表示」で **All AppsをON/OFF** でき、「フィード設定」の子画面で **独自フィード6カテゴリを個別にON/OFF** できます。All Appsを隠しても上スワイプのアプリ検索は利用できます。設定は再起動・バックアップ復元後も保持します。
 
@@ -149,10 +148,12 @@ All Appsの「左側半分だけに表示」の切替は廃止し、以前その
 
 ## その他のドキュメント
 
-### 現行版のPDF・ダウンロード資料（v1.3.5）
+### 現行版のPDF・ダウンロード資料（v1.3.8）
 
-- [操作マニュアルのPDF版](output/pdf/20261004_chimelauncher-user-manual.pdf)
-- [操作マニュアルのMarkdown・画像一式（ZIP）](output/pdf/20261004_chimelauncher-manual-source.zip)
+- [操作マニュアルのPDF版](output/pdf/20261006_chimelauncher-user-manual.pdf)
+- [操作マニュアルのMarkdown・画像一式（ZIP）](output/pdf/20261006_chimelauncher-manual-source.zip)
+
+- [マニュアルPDFの生成スクリプト](docs/20261006_build-manual.py)
 
 ### 仕様・変更履歴・作業ルール
 
@@ -167,8 +168,17 @@ All Appsの「左側半分だけに表示」の切替は廃止し、以前その
 - [Google Discover Companionの導入・実装・検証範囲](docs/20261001_google-discover-preview.md)
 - [Discoverの画面トークン修正と検証記録](docs/20261001_discover-window-token-fix.md)
 
+### 旧版の操作マニュアル（v1.3.5）
+
+- [v1.3.5の画像付き操作マニュアル](docs/20261004_chimelauncher-user-manual.md)
+- [v1.3.5の操作マニュアルPDF](output/pdf/20261004_chimelauncher-user-manual.pdf)
+- [v1.3.5のMarkdown・画像一式（ZIP）](output/pdf/20261004_chimelauncher-manual-source.zip)
+- [v1.3.5のPDF生成スクリプト](docs/20261004_build-manual.py)
+
 ### 旧版の操作マニュアル（v1.3.4）
 
 - [v1.3.4の画像付き操作マニュアル](docs/20261003_chimelauncher-user-manual.md)
 - [v1.3.4の操作マニュアルPDF](output/pdf/20261003_chimelauncher-user-manual.pdf)
 - [v1.3.4のMarkdown・画像一式（ZIP）](output/pdf/20261003_chimelauncher-manual-source.zip)
+
+- [v1.3.4のPDF生成スクリプト](docs/20261003_build-manual.py)
