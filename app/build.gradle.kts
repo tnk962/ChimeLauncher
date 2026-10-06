@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 42
-        versionName = "1.3.8"
+        versionCode = 43
+        versionName = "1.3.9-preview.1"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-06\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"拡大フォルダ内のスクロールで検索・通知を開かないように修正。中のアイコンを小さく中央へ寄せ、黒い余白のタップでもフォルダを開けます。Foldを展開したまま起動・更新すると落ちるページ参照を修正。フォルダは開くとアプリ一覧、長押しで編集・取り出し。検索終了とアプリからの復帰では現在ページを維持します。All Appsはフラットな一覧です。\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"My Notificationsの説明から検索の文言を削除し、GoodPixelの通知一覧を直接開くように変更。設定の「システム設定 & ツール」にもGoodPixelの通知一覧を開くボタンを追加。既存のMy Notifications配置はそのまま利用でき、GoodPixelが未導入・無効・非対応の場合は導入／更新を案内します。通知一覧からHOME操作で戻る際は起動元のページを維持します。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

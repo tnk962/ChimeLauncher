@@ -234,6 +234,23 @@ class AndroidAppLauncher(
 
     override fun launchCompanionAppOrFallback(action: LauncherAction): Boolean {
         val pkg = action.companionPackageName
+        val activity = action.companionActivityName
+        if (!pkg.isNullOrBlank() && !activity.isNullOrBlank()) {
+            return try {
+                appContext.startActivity(Intent().apply {
+                    component = ComponentName(pkg, activity)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+                true
+            } catch (_: Exception) {
+                val enabled = runCatching { packageManager.getApplicationInfo(pkg, 0).enabled }.getOrDefault(false)
+                Toast.makeText(appContext,
+                    if (enabled) "GoodPixelの通知一覧を開けませんでした。GoodPixelの更新・有効化を確認してください。"
+                    else "GoodPixelが未導入または無効です。GoodPixelをインストール・有効化してください。",
+                    Toast.LENGTH_LONG).show()
+                false
+            }
+        }
         if (!pkg.isNullOrBlank() && launchApp(pkg)) {
             return true
         }
@@ -244,23 +261,6 @@ class AndroidAppLauncher(
                     true
                 } else {
                     launchShortcutUri("https://b.hatena.ne.jp/hotentry/all")
-                }
-            }
-            LauncherAction.MY_NOTIFICATIONS -> {
-                // Android標準の通知履歴設定画面を試行
-                try {
-                    val intent = Intent("android.settings.NOTIFICATION_HISTORY").apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    appContext.startActivity(intent)
-                    true
-                } catch (_: Exception) {
-                    Toast.makeText(
-                        appContext,
-                        "My Notifications アプリが未インストールです（Phase 8 周辺アプリ連携枠）",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    false
                 }
             }
             else -> false

@@ -8,7 +8,8 @@ enum class LauncherAction(
     val title: String,
     val subtitle: String,
     val emojiIcon: String,
-    val companionPackageName: String? = null
+    val companionPackageName: String? = null,
+    val companionActivityName: String? = null
 ) {
     SEARCH(
         actionId = "launcher://action/search",
@@ -32,9 +33,10 @@ enum class LauncherAction(
     MY_NOTIFICATIONS(
         actionId = "launcher://action/my_notifications",
         title = "My Notifications (通知履歴)",
-        subtitle = "長期通知履歴・検索アプリを起動",
+        subtitle = "GoodPixelの通知一覧を開く",
         emojiIcon = "🔔",
-        companionPackageName = "com.myenvironment.notifications"
+        companionPackageName = "com.example.goodpixel",
+        companionActivityName = "com.example.goodpixel.ui.notilog.NotiLogActivity"
     ),
     SETTINGS(
         actionId = "launcher://action/settings",

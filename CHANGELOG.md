@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+### v1.3.9-preview.1（本体Build 43・実機確認待ち）
+
+- My Notificationsの説明から「検索」を削除し、GoodPixel（com.example.goodpixel）の通知ログActivityへ直接起動する。既存のactionIdを保持し、保存済みの配置・バックアップも作り直さず利用可能。
+- 設定「システム設定 & ツール」にGoodPixelの通知一覧を開くボタンを追加。HOME復帰は起動元のページを維持する。
+- 未導入・無効・非対応時はGoodPixelの導入／更新を案内し、Android標準の通知履歴へは遷移しない。GoodPixelのコードとCompanionは変更なし。
+- 本体v1.3.9-preview.1 / Build 43、設定上下の共通更新情報を更新。Companion更新不要。
+- 検証: ユニットテスト150件成功（旧パッケージを保持した保存済みActionの互換性を追加確認）。Debug／Releaseビルド成功、APK内部バージョン・既存配布版との署名一致を確認。エミュレーターで既存ホームのMy Notificationsと設定ボタンからGoodPixel通知ログActivityの直接起動、HOME復帰時の設定ページ維持、アイテム追加の説明文、GoodPixel一時無効時の導入／有効化案内と標準通知履歴へ移らないことを確認。一時無効化は復元済み。署名付きRelease APKでも直接起動を確認。
+- Galaxy／Pixelの実機確認、PRマージ、正式リリースは待ち。
+
 ### ドキュメント（2026-10-06）
 
 - v1.3.8の画像付き操作マニュアル・PDF・Markdown／画像一式ZIPを追加。フォルダの作成・長押し編集・取り出し・移動・サイズ変更・直接起動、検索の索引／ページ維持、All Apps表示トグル・独自フィード6カテゴリ設定を説明。

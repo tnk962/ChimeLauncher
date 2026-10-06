@@ -132,6 +132,7 @@ fun SettingsScreen(
     onOpenAccessibilitySettings: () -> Unit,
     onOpenUsageAccessSettings: () -> Unit = {},
     onOpenDefaultHomeSettings: () -> Unit,
+    onOpenNotificationHistory: () -> Unit,
     onSelectDiscoverMode: (DiscoverMode) -> Unit,
     onSetAllAppsPageEnabled: (Boolean) -> Unit,
     onSetFeedCategoryEnabled: (FeedCategory, Boolean) -> Unit,
@@ -1023,6 +1024,15 @@ fun SettingsScreen(
                             Icon(Icons.Default.Home, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("デフォルトのホームアプリを選択")
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        FilledTonalButton(
+                            onClick = onOpenNotificationHistory,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("GoodPixelの通知一覧を開く")
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

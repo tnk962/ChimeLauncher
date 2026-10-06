@@ -50,6 +50,13 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ---
 
+## 次期版 v1.3.9-preview.1：GoodPixelの通知一覧
+
+- 「アイテム追加」→ActionのMy Notificationsから「検索」の説明を外し、GoodPixelの通知一覧へ直接開きます。既存のMy Notifications配置もそのまま使えます。
+- 設定の「システム設定 & ツール」に「GoodPixelの通知一覧を開く」ボタンを追加します。
+- GoodPixelが未導入・無効なら導入／有効化を案内し、対応する画面を開けない版では更新を案内します。Android標準通知履歴への置き換えは行いません。
+- GoodPixel側は変更せず、公開済みの通知ログActivityを利用します。通知内容の記録や権限設定はGoodPixel側で行います。
+
 ## v1.3.8：ホーム・Dockのフォルダ
 
 - ホームまたはDockのアプリを長押ししてドラッグし、別のアプリの中央へ重ねて離すとフォルダを作成します。既存フォルダの中央へ重ねると追加できます。検索／All Appsからの追加にも対応します。

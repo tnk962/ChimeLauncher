@@ -759,8 +759,9 @@ class LauncherViewModel(
                 val nextLocked = !uiState.value.settings.layoutLocked
                 setLayoutLocked(nextLocked)
             }
-            LauncherAction.HATENA_FEED, LauncherAction.MY_NOTIFICATIONS -> {
-                appLauncher.launchCompanionAppOrFallback(action)
+            LauncherAction.HATENA_FEED -> appLauncher.launchCompanionAppOrFallback(action)
+            LauncherAction.MY_NOTIFICATIONS -> {
+                if (appLauncher.launchCompanionAppOrFallback(action)) appReturn.remember()
             }
         }
     }
