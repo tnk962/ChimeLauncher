@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
 import com.myenvironment.launcher.core.model.GridPosition
+import com.myenvironment.launcher.core.model.FolderApp
+import com.myenvironment.launcher.ui.folder.ExpandedFolderView
 import com.myenvironment.launcher.core.model.ItemType
 import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.core.model.LayoutItem
@@ -125,6 +127,7 @@ fun HomeGridPage(
     appDiscoveryRepository: AppDiscoveryRepository,
     widgetHostManager: WidgetHostManager,
     onItemClick: (LayoutItem, Boolean) -> Unit,
+    onFolderAppClick: (LayoutItem, FolderApp) -> Unit,
     onBlankLongPress: (GridPosition) -> Unit,
     onRequestAddAtCell: (GridPosition) -> Unit,
     onMoveItem: (LayoutItem, GridPosition) -> Unit,
@@ -429,6 +432,11 @@ fun HomeGridPage(
                             onMissingWidgetClick = { onItemClick(it, false) },
                             onSilentAutoRebindAttempt = { onSilentAutoRebindWidget(it) }
                         )
+                    } else if (item.type == ItemType.FOLDER && (effectiveSpanX > 1 || effectiveSpanY > 1)) {
+                        ExpandedFolderView(item, appDiscoveryRepository,
+                            onOpen = { onItemClick(item, true) },
+                            onLaunch = { onFolderAppClick(item, it) },
+                            modifier = Modifier.fillMaxSize())
                     } else {
                         LauncherItemGraphic(
                             type = item.type,
@@ -491,6 +499,10 @@ fun HomeGridPage(
                                 }
                             }
                         )
+                        if (item.type == ItemType.FOLDER) {
+                            DropdownMenuItem(text = { Text("📐 サイズを変更 (${effectiveSpanX}×${effectiveSpanY})") },
+                                onClick = { activeMenuItem = null; onResizeWidgetRequest(item) })
+                        }
                         if (item.type == ItemType.WIDGET) {
                             DropdownMenuItem(
                                 text = { Text("📐 サイズを変更 (${effectiveSpanX}×${effectiveSpanY})") },

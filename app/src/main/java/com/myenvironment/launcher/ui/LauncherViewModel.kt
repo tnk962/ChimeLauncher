@@ -1,5 +1,7 @@
 package com.myenvironment.launcher.ui
 
+import com.myenvironment.launcher.core.model.folderSpace
+import com.myenvironment.launcher.core.model.sizeFolder
 import com.myenvironment.launcher.core.model.FolderApp
 import com.myenvironment.launcher.core.model.asLayoutItem
 import com.myenvironment.launcher.core.model.folder
@@ -325,6 +327,9 @@ class LauncherViewModel(
     }
 
     private val discoverReturn = DiscoverReturn()
+    private val appReturn = AppReturn()
+
+    internal fun clearAppReturn() = appReturn.clear()
 
     fun openDiscoverArticle(url: String) {
         if (feedBridge.openArticleUrl(url)) discoverReturn.remember(DiscoverReturnTarget.CUSTOM)
@@ -340,10 +345,11 @@ class LauncherViewModel(
     )
 
     /**
-     * AndroidのHome操作が実行された際、すべてのオーバーレイを閉じてHOMEページへ戻す (仕様 4, 30)
+     * AndroidのHome操作が実行された際、すべてのオーバーレイを閉じる。アプリからの復帰は現在ページを維持し、それ以外はHOMEへ戻す (仕様 4, 30)
      * ※通常のホーム遷移では毎回ハプティックや音を追加せず、Chime条件成立時のみ静かに反応する
      */
     fun onHomeGestureInvoked() {
+        val keepCurrentPage = appReturn.consume()
         exitEditMode()
         overlayState.update {
             it.copy(
@@ -361,7 +367,7 @@ class LauncherViewModel(
                 jsonPreviewContent = null
             )
         }
-        _pageNavigationEvents.tryEmit(LauncherPage.PAGE_ID_HOME)
+        if (!keepCurrentPage) _pageNavigationEvents.tryEmit(LauncherPage.PAGE_ID_HOME)
         onLauncherResumed()
     }
 
@@ -536,6 +542,7 @@ class LauncherViewModel(
                     if (!launched) {
                         overlayState.update { it.copy(missingAppDialogTarget = item) }
                     } else {
+                        appReturn.remember()
                         appUsageRepository.recordAppLaunch(item.packageName)
                     }
                 }
@@ -579,6 +586,7 @@ class LauncherViewModel(
                 } else {
                     val launched = appLauncher.launchApp(item.packageName, item.activityName)
                     if (launched) {
+                        appReturn.remember()
                         appUsageRepository.recordAppLaunch(item.packageName)
                     }
                 }
@@ -598,6 +606,7 @@ class LauncherViewModel(
     fun launchApp(app: AppInfo) {
         val launched = appLauncher.launchApp(app)
         if (launched) {
+            appReturn.remember()
             appUsageRepository.recordAppLaunch(app.packageName)
         }
     }
@@ -1206,7 +1215,8 @@ class LauncherViewModel(
     }
 
     fun openResizeWidgetDialog(item: LayoutItem) = runIfUnlocked {
-        overlayState.update { it.copy(resizingWidgetTarget = item) }
+        if (item.type == ItemType.FOLDER) enterEditMode()
+        overlayState.update { it.copy(activeFolderId = null, resizingWidgetTarget = item) }
     }
 
     fun dismissResizeWidgetDialog() {
@@ -1216,6 +1226,15 @@ class LauncherViewModel(
     fun resizeWidgetItem(item: LayoutItem, newSpanX: Int, newSpanY: Int) = runIfUnlocked {
         launchLayoutEdit { snapshot ->
             val item = snapshot.items.find { it.id == item.id } ?: return@launchLayoutEdit
+            if (item.type == ItemType.FOLDER) {
+                val settings = settingsRepository.settings.first()
+                val updated = snapshot.sizeFolder(item.id, newSpanX, newSpanY,
+                    settings.compactGridColumns, settings.compactGridRows,
+                    settings.expandedGridColumns, settings.expandedGridRows)
+                if (updated == null) Toast.makeText(container.appContext, "そのサイズを置ける空きがありません", Toast.LENGTH_SHORT).show()
+                else layoutRepository.restoreLayoutSnapshot(updated)
+                return@launchLayoutEdit
+            }
             val settings = uiState.value.settings
             val compactCols = settings.compactGridColumns.coerceAtLeast(3)
             val compactRows = settings.compactGridRows.coerceAtLeast(3)
@@ -1405,12 +1424,12 @@ class LauncherViewModel(
         launchLayoutEdit { snapshot ->
             val item = snapshot.items.find { it.id == item.id } ?: return@launchLayoutEdit
             if (targetPageId != LauncherPage.PAGE_ID_HOME && snapshot.userPages.none { it.id == targetPageId }) return@launchLayoutEdit
-            if (item.type == ItemType.FOLDER && targetPageId != item.pageId) {
+            if (item.type == ItemType.FOLDER && (targetPageId != item.pageId || item.spanX > 1 || item.spanY > 1)) {
                 val settings = settingsRepository.settings.first()
-                val compact = snapshot.freeFolderCell(targetPageId, false, settings.compactGridColumns, settings.compactGridRows,
-                    newPosition.takeUnless { isExpandedMode })
-                val expanded = snapshot.freeFolderCell(targetPageId, true, settings.expandedGridColumns, settings.expandedGridRows,
-                    newPosition.takeIf { isExpandedMode })
+                val compact = snapshot.folderSpace(item.id, targetPageId, false, settings.compactGridColumns, settings.compactGridRows,
+                    item.spanX, item.spanY, if (isExpandedMode) item.compact else newPosition)
+                val expanded = snapshot.folderSpace(item.id, targetPageId, true, settings.expandedGridColumns, settings.expandedGridRows,
+                    item.spanX, item.spanY, if (isExpandedMode) newPosition else item.expanded ?: item.compact)
                 if (compact == null || expanded == null) {
                     Toast.makeText(container.appContext, "移動先に空きがありません", Toast.LENGTH_SHORT).show()
                 } else layoutRepository.upsertLayoutItem(item.copy(pageId = targetPageId, compact = compact, expanded = expanded))
@@ -1487,8 +1506,8 @@ class LauncherViewModel(
             }
             if (item.type == ItemType.FOLDER) {
                 val settings = settingsRepository.settings.first()
-                val compact = snapshot.freeFolderCell(destinationPageId, false, settings.compactGridColumns, settings.compactGridRows)
-                val expanded = snapshot.freeFolderCell(destinationPageId, true, settings.expandedGridColumns, settings.expandedGridRows)
+                val compact = snapshot.folderSpace(item.id, destinationPageId, false, settings.compactGridColumns, settings.compactGridRows, item.spanX, item.spanY, item.compact)
+                val expanded = snapshot.folderSpace(item.id, destinationPageId, true, settings.expandedGridColumns, settings.expandedGridRows, item.spanX, item.spanY, item.expanded ?: item.compact)
                 if (compact == null || expanded == null) {
                     Toast.makeText(container.appContext, "移動先に空きがありません", Toast.LENGTH_SHORT).show()
                 } else {

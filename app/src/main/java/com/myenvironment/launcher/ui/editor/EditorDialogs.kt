@@ -639,7 +639,7 @@ fun WidgetResizeDialog(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = "ウィジェットのサイズ変更",
+                        text = if (item.type == ItemType.FOLDER) "フォルダのサイズ変更" else "ウィジェットのサイズ変更",
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )

@@ -737,7 +737,7 @@ fun LauncherScreen(
             kotlin.math.abs(drag.fingerInRoot.y - centerY) > metrics.cellHeightPx * 0.28f) return null
         return uiState.layoutItems.firstOrNull {
             it.pageId == target.first && it.id != drag.item.id && it.type in setOf(ItemType.APP, ItemType.FOLDER) &&
-                it.resolveClampedPosition(metrics.isExpanded, metrics.columns, metrics.rows) == target.third
+                target.third in it.occupiedCells(metrics.isExpanded, metrics.columns, metrics.rows)
         }?.id
     }
 
@@ -1357,8 +1357,8 @@ fun LauncherScreen(
             }
             WidgetResizeDialog(
                 item = resizingWidget,
-                maxColumns = maxCols,
-                maxRows = maxRows,
+                maxColumns = if (resizingWidget.type == ItemType.FOLDER) minOf(uiState.settings.compactGridColumns, uiState.settings.expandedGridColumns) else maxCols,
+                maxRows = if (resizingWidget.type == ItemType.FOLDER) minOf(uiState.settings.compactGridRows, uiState.settings.expandedGridRows) else maxRows,
                 onConfirmResize = { newSpanX, newSpanY ->
                     viewModel.resizeWidgetItem(
                         item = resizingWidget,
@@ -1608,6 +1608,7 @@ private fun LauncherPageContent(
                 isEditMode = uiState.overlay.isEditMode,
                 appDiscoveryRepository = viewModel.container.appDiscoveryRepository,
                 widgetHostManager = viewModel.widgetHostManager,
+                onFolderAppClick = { folder, app -> viewModel.launchFolderApp(folder.id, app) },
                 onItemClick = { item, isInstalled ->
                     viewModel.onLayoutItemClicked(item, isInstalled)
                 },

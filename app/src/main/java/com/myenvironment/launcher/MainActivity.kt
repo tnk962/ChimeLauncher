@@ -23,7 +23,7 @@ import com.myenvironment.launcher.ui.theme.MyLauncherTheme
  *
  * - CATEGORY_HOME / CATEGORY_DEFAULT に対応
  * - singleTask で常駐し、Homeジェスチャー (onNewIntent) 発生時は
- *   Activityを再生成せず、記事からの一度の復帰またはHOMEへ戻す。
+ *   Activityを再生成せず、記事・アプリからの復帰では元のページを維持し、それ以外はHOMEへ戻す。
  * - フォアグラウンド復帰・離脱時に Chime Moments (First / Return / Time Chime) を評価する。
  */
 class MainActivity : ComponentActivity() {
@@ -66,6 +66,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         googleOverlay.onResume()
         restoreDiscoverIfPending()
+        // onNewIntentが先に処理したHOME復帰、または通常のBack復帰の記録を消す。
+        viewModel.clearAppReturn()
     }
     override fun onPause() {
         val unlocked = !getSystemService(KeyguardManager::class.java).isKeyguardLocked
@@ -108,7 +110,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // AndroidのHome操作（Home Gesture / Homeボタン）が発生した場合、記事からの一度の復帰を除きHOMEページを表示する
+        // AndroidのHome操作（Home Gesture / Homeボタン）が発生した場合、記事・アプリからの復帰では元ページを維持する
         if (intent.action == Intent.ACTION_MAIN &&
             (intent.hasCategory(Intent.CATEGORY_HOME) || intent.hasCategory(Intent.CATEGORY_LAUNCHER))
         ) {
