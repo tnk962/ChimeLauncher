@@ -14,9 +14,9 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 44
-        versionName = "1.3.9-preview.2"
-        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-06\"")
+        versionCode = 45
+        versionName = "1.3.9"
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-07\"")
         buildConfigField("String", "UPDATE_SUMMARY", "\"My Notificationsと設定から端末に合った通知履歴を開きます。Galaxyは設定でNotiStar優先／システム標準を選んで保存し、NotiStarが使えない場合は標準へ切り替えます。PixelなどはGoodPixelを優先し、使えない場合は標準通知履歴を開きます。検索の説明は削除し、既存の配置はそのまま利用できます。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
