@@ -1,5 +1,7 @@
 package com.myenvironment.launcher.ui.folder
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +17,7 @@ import com.myenvironment.launcher.core.launcher.AppDiscoveryRepository
 import com.myenvironment.launcher.core.model.*
 import com.myenvironment.launcher.ui.components.LauncherItemGraphic
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FolderDialog(
     folder: LayoutItem,
@@ -22,13 +25,16 @@ fun FolderDialog(
     repository: AppDiscoveryRepository,
     locked: Boolean,
     onDismiss: () -> Unit,
+    onBeginEdit: () -> Unit,
+    onEndEdit: () -> Unit,
     onRename: (String) -> Unit,
     onLaunch: (FolderApp) -> Unit,
     onAdd: (AppInfo) -> Unit,
     onExtract: (FolderApp, Boolean) -> Unit
 ) {
     var name by remember(folder.id) { mutableStateOf(folder.label) }
-    var adding by remember(folder.id) { mutableStateOf(false) }
+    var editing by remember(folder.id, locked) { mutableStateOf(false) }
+    var adding by remember(folder.id, locked) { mutableStateOf(false) }
     var query by remember(folder.id) { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = { if (adding) adding = false else onDismiss() },
@@ -53,7 +59,7 @@ fun FolderDialog(
                         }
                     }
                 } else {
-                    if (!locked) {
+                    if (!locked && editing) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             OutlinedTextField(name, { name = it }, modifier = Modifier.weight(1f),
                                 label = { Text("フォルダ名") }, singleLine = true)
@@ -69,8 +75,11 @@ fun FolderDialog(
                             Column {
                                 LauncherItemGraphic(ItemType.APP, app.packageName, app.activityName, "", app.label,
                                     repository.isPackageInstalled(app.packageName), repository,
-                                    modifier = Modifier.fillMaxWidth().clickable { onLaunch(app) })
-                                if (!locked) {
+                                    modifier = Modifier.fillMaxWidth().combinedClickable(
+                                        onClick = { onLaunch(app) },
+                                        onLongClick = { if (!locked) { editing = true; menu = true; onBeginEdit() } }
+                                    ))
+                                if (!locked && editing) {
                                     Box {
                                         TextButton(onClick = { menu = true }) { Text("取り出す") }
                                         DropdownMenu(menu, { menu = false }) {
@@ -86,7 +95,9 @@ fun FolderDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { if (adding) adding = false else onDismiss() }) { Text(if (adding) "戻る" else "閉じる") } },
-        dismissButton = { if (!locked && !adding) TextButton(onClick = { adding = true }) { Text("アプリを追加") } }
+        confirmButton = { TextButton(onClick = {
+            when { adding -> adding = false; editing -> { editing = false; onEndEdit() }; else -> onDismiss() }
+        }) { Text(if (adding) "戻る" else if (editing) "編集を完了" else "閉じる") } },
+        dismissButton = { if (!locked && editing && !adding) TextButton(onClick = { adding = true }) { Text("アプリを追加") } }
     )
 }

@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 39
-        versionName = "1.3.8-preview.2"
+        versionCode = 40
+        versionName = "1.3.8-preview.3"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-06\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"アプリからの復帰で起動元ページを維持。ホームのフォルダサイズ変更に対応。1×1以外は中のアプリアイコンを直接タップして起動し、スクロールして探せます。ホームとDockのフォルダ作成・編集に対応。フォルダをドラッグしてページ間・Dock内・ホームとDockの間で移動でき、保存・バックアップ・Undoでも内容を保持します。All Appsは全アプリのフラットな一覧を維持します。\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"フォルダを開くとアプリ一覧を表示し、アプリの長押しから編集・取り出しに進みます。ホームのフォルダ名は小さく下側に表示し、拡大フォルダのアプリ名は非表示。1×2でも複数アイコンが分かる表示に調整。検索を下スワイプやHOME操作で閉じても現在ページを維持します。ホームのフォルダサイズ変更・直接起動と、ホーム／Dock間の移動に対応。All Appsはフラットな一覧です。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

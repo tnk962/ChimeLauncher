@@ -345,11 +345,11 @@ class LauncherViewModel(
     )
 
     /**
-     * AndroidのHome操作が実行された際、すべてのオーバーレイを閉じる。アプリからの復帰は現在ページを維持し、それ以外はHOMEへ戻す (仕様 4, 30)
+     * AndroidのHome操作が実行された際、すべてのオーバーレイを閉じる。アプリからの復帰と検索の終了は現在ページを維持し、それ以外はHOMEへ戻す (仕様 4, 30)
      * ※通常のホーム遷移では毎回ハプティックや音を追加せず、Chime条件成立時のみ静かに反応する
      */
     fun onHomeGestureInvoked() {
-        val keepCurrentPage = appReturn.consume()
+        val keepCurrentPage = keepPageOnHomeReturn(appReturn.consume(), overlayState.value.isSearchOverlayOpen)
         exitEditMode()
         overlayState.update {
             it.copy(

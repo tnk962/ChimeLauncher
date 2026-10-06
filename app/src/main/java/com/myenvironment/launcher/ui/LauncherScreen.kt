@@ -1269,6 +1269,8 @@ fun LauncherScreen(
                 folder = activeFolder, installedApps = uiState.installedApps,
                 repository = viewModel.container.appDiscoveryRepository, locked = uiState.settings.layoutLocked,
                 onDismiss = viewModel::closeFolder,
+                onBeginEdit = viewModel::enterEditMode,
+                onEndEdit = viewModel::exitEditMode,
                 onRename = { viewModel.renameFolder(activeFolder.id, it) },
                 onLaunch = { viewModel.launchFolderApp(activeFolder.id, it) },
                 onAdd = { viewModel.addAppToFolder(activeFolder.id, it) },
