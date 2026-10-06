@@ -14,10 +14,10 @@ android {
         applicationId = "com.myenvironment.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 40
-        versionName = "1.3.8-preview.3"
+        versionCode = 41
+        versionName = "1.3.8-preview.4"
         buildConfigField("String", "BUILD_TIMESTAMP", "\"2026-10-06\"")
-        buildConfigField("String", "UPDATE_SUMMARY", "\"フォルダを開くとアプリ一覧を表示し、アプリの長押しから編集・取り出しに進みます。ホームのフォルダ名は小さく下側に表示し、拡大フォルダのアプリ名は非表示。1×2でも複数アイコンが分かる表示に調整。検索を下スワイプやHOME操作で閉じても現在ページを維持します。ホームのフォルダサイズ変更・直接起動と、ホーム／Dock間の移動に対応。All Appsはフラットな一覧です。\"")
+        buildConfigField("String", "UPDATE_SUMMARY", "\"拡大フォルダ内のスクロールで検索・通知を開かないように修正。中のアイコンを小さく中央へ寄せ、黒い余白のタップでもフォルダを開けます。Foldを展開したまま起動・更新すると落ちるページ参照を修正。フォルダは開くとアプリ一覧、長押しで編集・取り出し。検索終了とアプリからの復帰では現在ページを維持します。All Appsはフラットな一覧です。\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

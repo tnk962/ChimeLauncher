@@ -28,17 +28,23 @@ fun ExpandedFolderView(folder: LayoutItem, repository: AppDiscoveryRepository, o
     onLaunch: (FolderApp) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(12.dp))
-            .background(Color(0xD9222936)).padding(4.dp)) {
-            // Two columns also fit narrow 1×2 folders; app labels remain hidden on Home.
-            val columns = (maxWidth.value / 44f).toInt().coerceAtLeast(2)
-            val iconSize = (maxWidth / columns - 6.dp).coerceIn(20.dp, 40.dp)
-            LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            .background(Color(0xD9222936)).clickable(onClick = onOpen), contentAlignment = Alignment.Center) {
+            val columns = (maxWidth.value / 48f).toInt().coerceAtLeast(2)
+                .coerceAtMost(folder.folderApps.size.coerceAtLeast(1))
+            val availableWidth = (maxWidth - 16.dp).coerceAtLeast(24.dp)
+            val iconSize = (availableWidth / columns - 12.dp).coerceIn(16.dp, 32.dp)
+            val rows = (folder.folderApps.size + columns - 1) / columns
+            val gridHeight = (rows * (iconSize.value + 12f)).dp.coerceAtMost((maxHeight - 16.dp).coerceAtLeast(24.dp))
+            LazyVerticalGrid(GridCells.Fixed(columns), Modifier.width(availableWidth).height(gridHeight),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(folder.folderApps, key = { it.id }) { app ->
-                    LauncherItemGraphic(ItemType.APP, app.packageName, app.activityName, "", app.label,
-                        repository.isPackageInstalled(app.packageName), repository, iconSize = iconSize, showLabel = false,
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = app.label }
-                            .clickable { onLaunch(app) }.padding(vertical = 3.dp))
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        // Only the icon launches an app. The dark space around it opens the folder.
+                        LauncherItemGraphic(ItemType.APP, app.packageName, app.activityName, "", app.label,
+                            repository.isPackageInstalled(app.packageName), repository, iconSize = iconSize, showLabel = false,
+                            modifier = Modifier.size(iconSize + 8.dp).semantics { contentDescription = app.label }
+                                .clickable { onLaunch(app) })
+                    }
                 }
             }
         }

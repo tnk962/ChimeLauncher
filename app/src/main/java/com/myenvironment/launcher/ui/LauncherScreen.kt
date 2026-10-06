@@ -857,7 +857,7 @@ fun LauncherScreen(
                     // 左右2ページ見開きモード（Discover・All Apps・設定は1ページ全画面固定、他は左右2ページ見開き）
                     HorizontalPager(
                         state = dualPagerState,
-                        key = { index -> dualSlots[index].visiblePageIds.sorted().joinToString("|") },
+                        key = { index -> dualPagerKey(dualSlots, index) },
                         beyondViewportPageCount = dualSlots.size.coerceAtLeast(1),
                         userScrollEnabled = activeDragState == null,
                         modifier = Modifier
@@ -947,7 +947,7 @@ fun LauncherScreen(
                     // Expanded 1ページ全画面表示モード
                     HorizontalPager(
                         state = singlePagerState,
-                        key = { index -> pages[index].id },
+                        key = { index -> singlePagerKey(pages, index) },
                         beyondViewportPageCount = pages.size.coerceAtLeast(1),
                         userScrollEnabled = activeDragState == null,
                         modifier = Modifier

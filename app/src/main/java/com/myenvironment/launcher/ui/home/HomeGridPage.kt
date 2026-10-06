@@ -610,7 +610,8 @@ internal fun isTouchInsideScrollableWidget(
     val safeRows = rows.coerceAtLeast(1)
 
     for (item in items) {
-        if (item.type != ItemType.WIDGET) continue
+        val expandedFolder = item.type == ItemType.FOLDER && (item.spanX > 1 || item.spanY > 1)
+        if (item.type != ItemType.WIDGET && !expandedFolder) continue
         val spanX = item.resolveSpanX(safeCols)
         val spanY = item.resolveSpanY(safeRows)
         val pos = item.resolveClampedPosition(
@@ -624,7 +625,7 @@ internal fun isTouchInsideScrollableWidget(
         val bottom = (pos.y + spanY) * cellHeightPx
 
         if (touchOffset.x in left..right && touchOffset.y in top..bottom) {
-            if (isWidgetScrollable(item)) {
+            if (expandedFolder || isWidgetScrollable(item)) {
                 return true
             }
         }
