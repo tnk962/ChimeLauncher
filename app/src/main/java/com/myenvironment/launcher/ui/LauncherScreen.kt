@@ -96,6 +96,7 @@ import com.myenvironment.launcher.core.model.DiscoverMode
 import com.myenvironment.launcher.core.model.ExpandedPageLayoutMode
 import com.myenvironment.launcher.core.model.GridPosition
 import com.myenvironment.launcher.core.model.ItemType
+import com.myenvironment.launcher.core.model.LauncherAction
 import com.myenvironment.launcher.core.model.LauncherPage
 import com.myenvironment.launcher.ui.adaptive.AdaptiveLayoutSpec
 import com.myenvironment.launcher.ui.adaptive.DockPlacement
@@ -1236,6 +1237,8 @@ fun LauncherScreen(
                 onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
                 onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
                 onOpenDefaultHomeSettings = { viewModel.openDefaultHomeSettings() },
+                onOpenNotificationHistory = { viewModel.triggerLauncherAction(LauncherAction.MY_NOTIFICATIONS) },
+                onSelectGalaxyNotificationHistoryTarget = { viewModel.setGalaxyNotificationHistoryTarget(it) },
                 onSelectDiscoverMode = { viewModel.setDiscoverMode(it) },
                 onSaveSnapshot = { viewModel.saveSnapshot(it) },
                 onRestoreSnapshot = { viewModel.restoreSnapshot(it) },
@@ -1574,6 +1577,8 @@ private fun LauncherPageContent(
                 onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
                 onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
                 onOpenDefaultHomeSettings = { viewModel.openDefaultHomeSettings() },
+                onOpenNotificationHistory = { viewModel.triggerLauncherAction(LauncherAction.MY_NOTIFICATIONS) },
+                onSelectGalaxyNotificationHistoryTarget = { viewModel.setGalaxyNotificationHistoryTarget(it) },
                 onSelectDiscoverMode = { viewModel.setDiscoverMode(it) },
                 onSaveSnapshot = { viewModel.saveSnapshot(it) },
                 onRestoreSnapshot = { viewModel.restoreSnapshot(it) },

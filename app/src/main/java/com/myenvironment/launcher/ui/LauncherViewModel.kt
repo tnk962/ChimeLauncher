@@ -1,5 +1,7 @@
 package com.myenvironment.launcher.ui
 
+import com.myenvironment.launcher.core.model.GalaxyNotificationHistoryTarget
+
 import com.myenvironment.launcher.core.model.folderSpace
 import com.myenvironment.launcher.core.model.sizeFolder
 import com.myenvironment.launcher.core.model.FolderApp
@@ -759,8 +761,11 @@ class LauncherViewModel(
                 val nextLocked = !uiState.value.settings.layoutLocked
                 setLayoutLocked(nextLocked)
             }
-            LauncherAction.HATENA_FEED, LauncherAction.MY_NOTIFICATIONS -> {
-                appLauncher.launchCompanionAppOrFallback(action)
+            LauncherAction.HATENA_FEED -> appLauncher.launchCompanionAppOrFallback(action)
+            LauncherAction.MY_NOTIFICATIONS -> {
+                viewModelScope.launch {
+                    if (appLauncher.launchCompanionAppOrFallback(action, settingsRepository.settings.first().galaxyNotificationHistoryTarget)) appReturn.remember()
+                }
             }
         }
     }
@@ -1672,6 +1677,10 @@ class LauncherViewModel(
 
     fun setSearchIndexEdgeDistanceDp(distanceDp: Int) {
         viewModelScope.launch { settingsRepository.setSearchIndexEdgeDistanceDp(distanceDp) }
+    }
+
+    fun setGalaxyNotificationHistoryTarget(target: GalaxyNotificationHistoryTarget) {
+        viewModelScope.launch { settingsRepository.setGalaxyNotificationHistoryTarget(target) }
     }
 
     fun setSwipeDownNotificationEnabled(enabled: Boolean) {

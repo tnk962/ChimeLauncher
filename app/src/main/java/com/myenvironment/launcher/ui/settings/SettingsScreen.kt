@@ -1,5 +1,8 @@
 package com.myenvironment.launcher.ui.settings
 
+import android.os.Build
+import com.myenvironment.launcher.core.model.GalaxyNotificationHistoryTarget
+
 import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -132,6 +135,8 @@ fun SettingsScreen(
     onOpenAccessibilitySettings: () -> Unit,
     onOpenUsageAccessSettings: () -> Unit = {},
     onOpenDefaultHomeSettings: () -> Unit,
+    onOpenNotificationHistory: () -> Unit,
+    onSelectGalaxyNotificationHistoryTarget: (GalaxyNotificationHistoryTarget) -> Unit,
     onSelectDiscoverMode: (DiscoverMode) -> Unit,
     onSetAllAppsPageEnabled: (Boolean) -> Unit,
     onSetFeedCategoryEnabled: (FeedCategory, Boolean) -> Unit,
@@ -1023,6 +1028,32 @@ fun SettingsScreen(
                             Icon(Icons.Default.Home, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("デフォルトのホームアプリを選択")
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
+                            Text("Galaxyの通知履歴", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            GalaxyNotificationHistoryTarget.entries.forEach { target ->
+                                Row(Modifier.fillMaxWidth().clickable { onSelectGalaxyNotificationHistoryTarget(target) },
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = settings.galaxyNotificationHistoryTarget == target,
+                                        onClick = { onSelectGalaxyNotificationHistoryTarget(target) })
+                                    Text(target.title, color = Color.White)
+                                }
+                            }
+                            Text("NotiStarが使えない場合は標準通知履歴を開きます。", fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Text("GoodPixelを優先し、使えない場合は標準通知履歴を開きます。", fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        FilledTonalButton(
+                            onClick = onOpenNotificationHistory,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("通知履歴を開く")
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

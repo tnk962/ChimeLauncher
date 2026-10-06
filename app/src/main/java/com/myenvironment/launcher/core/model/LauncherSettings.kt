@@ -144,6 +144,7 @@ data class LauncherSettings(
     val tinyIconsShowLabels: Boolean = false,
     val searchIndexEdgeDistanceDp: Int = 32,
     val swipeDownNotificationEnabled: Boolean = true,
+    val galaxyNotificationHistoryTarget: GalaxyNotificationHistoryTarget = GalaxyNotificationHistoryTarget.NOTISTAR,
     val discoverMode: DiscoverMode = DiscoverMode.NATIVE_BRIDGE,
     val allAppsPageEnabled: Boolean = true,
     val disabledFeedCategoryIds: Set<String> = emptySet(),

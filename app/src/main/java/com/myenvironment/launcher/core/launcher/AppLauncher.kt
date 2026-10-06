@@ -1,6 +1,7 @@
 package com.myenvironment.launcher.core.launcher
 
 import com.myenvironment.launcher.core.model.AppInfo
+import com.myenvironment.launcher.core.model.GalaxyNotificationHistoryTarget
 import com.myenvironment.launcher.core.model.LauncherAction
 
 /**
@@ -66,5 +67,5 @@ interface AppLauncher {
     /**
      * 周辺アプリ（Hatena Discover / My Notifications等）を起動する
      */
-    fun launchCompanionAppOrFallback(action: LauncherAction): Boolean
+    fun launchCompanionAppOrFallback(action: LauncherAction, galaxyTarget: GalaxyNotificationHistoryTarget = GalaxyNotificationHistoryTarget.NOTISTAR): Boolean
 }

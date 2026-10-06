@@ -1,5 +1,6 @@
 package com.myenvironment.launcher.core.storage
 
+import com.myenvironment.launcher.core.model.GalaxyNotificationHistoryTarget
 import com.myenvironment.launcher.core.model.ExpandedDockPosition
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -46,6 +47,7 @@ class DataStoreSettingsRepository(
         val TINY_SHOW_LABELS = booleanPreferencesKey("tiny_icons_show_labels")
         val SEARCH_INDEX_EDGE = intPreferencesKey("search_index_edge_distance_dp")
         val SWIPE_DOWN_NOTIFICATION = booleanPreferencesKey("swipe_down_notification_enabled")
+        val GALAXY_NOTIFICATION_HISTORY = stringPreferencesKey("galaxy_notification_history_target")
         val ALL_APPS_ENABLED = booleanPreferencesKey("all_apps_page_enabled")
         val DISABLED_FEEDS = stringSetPreferencesKey("disabled_feed_category_ids")
         val DISCOVER_MODE = stringPreferencesKey("discover_mode_v2")
@@ -99,6 +101,7 @@ class DataStoreSettingsRepository(
             tinyIconsShowLabels = prefs[Keys.TINY_SHOW_LABELS] ?: default.tinyIconsShowLabels,
             searchIndexEdgeDistanceDp = (prefs[Keys.SEARCH_INDEX_EDGE] ?: default.searchIndexEdgeDistanceDp).coerceIn(32, 128),
             swipeDownNotificationEnabled = prefs[Keys.SWIPE_DOWN_NOTIFICATION] ?: default.swipeDownNotificationEnabled,
+            galaxyNotificationHistoryTarget = runCatching { GalaxyNotificationHistoryTarget.valueOf(prefs[Keys.GALAXY_NOTIFICATION_HISTORY] ?: default.galaxyNotificationHistoryTarget.name) }.getOrDefault(default.galaxyNotificationHistoryTarget),
             discoverMode = discoverMode,
             allAppsPageEnabled = prefs[Keys.ALL_APPS_ENABLED] ?: default.allAppsPageEnabled,
             disabledFeedCategoryIds = prefs[Keys.DISABLED_FEEDS] ?: default.disabledFeedCategoryIds,
@@ -182,6 +185,10 @@ class DataStoreSettingsRepository(
         appContext.launcherDataStore.edit { prefs ->
             prefs[Keys.SWIPE_DOWN_NOTIFICATION] = enabled
         }
+    }
+
+    override suspend fun setGalaxyNotificationHistoryTarget(target: GalaxyNotificationHistoryTarget) {
+        appContext.launcherDataStore.edit { it[Keys.GALAXY_NOTIFICATION_HISTORY] = target.name }
     }
 
     override suspend fun setAllAppsPageEnabled(enabled: Boolean) {
@@ -276,6 +283,7 @@ class DataStoreSettingsRepository(
             prefs[Keys.TINY_SHOW_LABELS] = newSettings.tinyIconsShowLabels
             prefs[Keys.SEARCH_INDEX_EDGE] = newSettings.searchIndexEdgeDistanceDp.coerceIn(32, 128)
             prefs[Keys.SWIPE_DOWN_NOTIFICATION] = newSettings.swipeDownNotificationEnabled
+            prefs[Keys.GALAXY_NOTIFICATION_HISTORY] = newSettings.galaxyNotificationHistoryTarget.name
             prefs[Keys.ALL_APPS_ENABLED] = newSettings.allAppsPageEnabled
             prefs[Keys.DISABLED_FEEDS] = newSettings.disabledFeedCategoryIds
             prefs[Keys.DISCOVER_MODE] = newSettings.discoverMode.normalized.name

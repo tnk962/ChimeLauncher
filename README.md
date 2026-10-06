@@ -1,11 +1,11 @@
-# Chime Launcher (v1.3.8)
+# Chime Launcher (v1.3.9)
 
 現行版の操作マニュアル（v1.3.8）<br>
 [画像付き操作マニュアルを読む](docs/20261006_chimelauncher-user-manual.md) — GitHub上で本文・画像・目次をそのまま読めます。
 
 ---
 
-[正式版v1.3.8](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.8)向けの実装です。本体は **Build 42**、Chime Discover Companionは **Build 12**。フォルダ機能と修正はpreview.4でユーザーの実機確認OKを受領しました。画像付き操作マニュアルとPDFをv1.3.8に更新しました。変更のない基本操作の旧画像は撮影版を明記して掲載しています。
+[正式版v1.3.9](https://github.com/tnk962/ChimeLauncher/releases/tag/v1.3.9)向けの実装です。本体は **Build 45**、Chime Discover Companionは **Build 13**。Galaxy・Pixelでpreview.2の実機確認済みです。操作マニュアルはv1.3.8の基本操作を掲載しています。v1.3.9の通知履歴の変更は下記を参照してください。
 
 v1.3.7では、設定の「ページ・フィード表示」で **All AppsをON/OFF** でき、「フィード設定」の子画面で **独自フィード6カテゴリを個別にON/OFF** できます。All Appsを隠しても上スワイプのアプリ検索は利用できます。設定は再起動・バックアップ復元後も保持します。
 
@@ -28,10 +28,10 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ### 1. 初回 APK をダウンロードする
 1. このリポジトリの **[Releases（最新リリース）](https://github.com/tnk962/ChimeLauncher/releases/latest)** ページを開きます。
-2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.8.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.8.apk`** も導入してください。
+2. 最新バージョンの **Assets** にある **`ChimeLauncher-v1.3.9.apk`** をタップしてダウンロードします。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.9.apk`** も導入してください。
 
 ### 2. Android 端末にインストールする
-1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリからAPKを開きます。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.8.apk`** → **`ChimeLauncher-v1.3.8.apk`** の順でインストールしてください。本体のみの場合は **`ChimeLauncher-v1.3.8.apk`** を開きます。
+1. ダウンロード完了通知、または「ファイル（Files by Google）」アプリからAPKを開きます。Google Discoverを利用する場合は **`ChimeDiscoverCompanion-v1.3.9.apk`** → **`ChimeLauncher-v1.3.9.apk`** の順でインストールしてください。本体のみの場合は **`ChimeLauncher-v1.3.9.apk`** を開きます。
 2. 初回のみ「この提供元の不明なアプリをインストールしますか？」と表示された場合は、**「設定」→「この提供元のアプリを許可」** を ON にして「インストール」をタップします。
 3. **Google Play プロテクトの確認が表示された場合**:
    - 個人開発の配布用 APK のため、「Play プロテクトによりブロックされました」や「スキャンしますか？」と表示されることがあります。
@@ -49,6 +49,13 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 - **Accessibility権限設定を開く（任意）**: ホーム画面中央からの下スワイプで通知パネルを直接下ろせない端末のみ、`Chime Launcher 通知シェード操作` を ON にしてください。
 
 ---
+
+## v1.3.9：端末別の通知履歴
+
+- 「アイテム追加」→ActionのMy Notificationsから「検索」の説明を外し、端末に合った通知履歴を開きます。既存の配置もそのまま使えます。
+- 設定の「システム設定 & ツール」に「通知履歴を開く」ボタンを追加します。Galaxyでは同じ場所で「NotiStar優先／システム標準」を選んで保存できます。NotiStarが使えない場合は標準通知履歴へ切り替えます。
+- PixelなどではGoodPixelの通知一覧を優先し、未導入・無効・非対応なら標準通知履歴へ切り替えます。
+- Galaxyの選択は再起動・JSONバックアップ後も保持します。Galaxyの設定を他の端末へ復元しても、他の端末ではGoodPixel優先になります。GoodPixelの更新は不要です。Companionはバージョン情報のみ更新しています。
 
 ## v1.3.8：ホーム・Dockのフォルダ
 

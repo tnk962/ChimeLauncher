@@ -5,9 +5,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.net.Uri
+import android.os.Build
 import android.os.Process
 import android.provider.Settings
 import android.widget.Toast
+import com.myenvironment.launcher.core.model.GalaxyNotificationHistoryTarget
+import com.myenvironment.launcher.core.model.NotificationHistoryDestination
+import com.myenvironment.launcher.core.model.notificationHistoryDestinations
 import com.myenvironment.launcher.core.model.LauncherAction
 
 /**
@@ -232,7 +236,29 @@ class AndroidAppLauncher(
         }
     }
 
-    override fun launchCompanionAppOrFallback(action: LauncherAction): Boolean {
+    private fun openNotificationHistory(galaxyTarget: GalaxyNotificationHistoryTarget): Boolean {
+        for (destination in notificationHistoryDestinations(Build.MANUFACTURER, galaxyTarget)) {
+            val opened = runCatching {
+                val intent = when (destination) {
+                    NotificationHistoryDestination.NOTISTAR -> packageManager.getLaunchIntentForPackage("com.samsung.systemui.notilus")
+                    NotificationHistoryDestination.GOODPIXEL -> Intent().apply {
+                        component = ComponentName(LauncherAction.MY_NOTIFICATIONS.companionPackageName!!,
+                            LauncherAction.MY_NOTIFICATIONS.companionActivityName!!)
+                    }
+                    NotificationHistoryDestination.SYSTEM -> Intent("android.settings.NOTIFICATION_HISTORY")
+                } ?: return@runCatching false
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                appContext.startActivity(intent)
+                true
+            }.getOrDefault(false)
+            if (opened) return true
+        }
+        Toast.makeText(appContext, "通知履歴を開けませんでした。端末の通知設定を確認してください。", Toast.LENGTH_LONG).show()
+        return false
+    }
+
+    override fun launchCompanionAppOrFallback(action: LauncherAction, galaxyTarget: GalaxyNotificationHistoryTarget): Boolean {
+        if (action == LauncherAction.MY_NOTIFICATIONS) return openNotificationHistory(galaxyTarget)
         val pkg = action.companionPackageName
         if (!pkg.isNullOrBlank() && launchApp(pkg)) {
             return true
@@ -244,23 +270,6 @@ class AndroidAppLauncher(
                     true
                 } else {
                     launchShortcutUri("https://b.hatena.ne.jp/hotentry/all")
-                }
-            }
-            LauncherAction.MY_NOTIFICATIONS -> {
-                // Android標準の通知履歴設定画面を試行
-                try {
-                    val intent = Intent("android.settings.NOTIFICATION_HISTORY").apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    appContext.startActivity(intent)
-                    true
-                } catch (_: Exception) {
-                    Toast.makeText(
-                        appContext,
-                        "My Notifications アプリが未インストールです（Phase 8 周辺アプリ連携枠）",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    false
                 }
             }
             else -> false
