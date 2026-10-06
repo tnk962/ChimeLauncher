@@ -6,14 +6,15 @@
 
 ## [Unreleased]
 
-### v1.3.9-preview.1（本体Build 43・実機確認待ち）
+### v1.3.9-preview.2（本体Build 44・実機確認待ち）
 
-- My Notificationsの説明から「検索」を削除し、GoodPixel（com.example.goodpixel）の通知ログActivityへ直接起動する。既存のactionIdを保持し、保存済みの配置・バックアップも作り直さず利用可能。
-- 設定「システム設定 & ツール」にGoodPixelの通知一覧を開くボタンを追加。HOME復帰は起動元のページを維持する。
-- 未導入・無効・非対応時はGoodPixelの導入／更新を案内し、Android標準の通知履歴へは遷移しない。GoodPixelのコードとCompanionは変更なし。
-- 本体v1.3.9-preview.1 / Build 43、設定上下の共通更新情報を更新。Companion更新不要。
-- 検証: ユニットテスト150件成功（旧パッケージを保持した保存済みActionの互換性を追加確認）。Debug／Releaseビルド成功、APK内部バージョン・既存配布版との署名一致を確認。エミュレーターで既存ホームのMy Notificationsと設定ボタンからGoodPixel通知ログActivityの直接起動、HOME復帰時の設定ページ維持、アイテム追加の説明文、GoodPixel一時無効時の導入／有効化案内と標準通知履歴へ移らないことを確認。一時無効化は復元済み。署名付きRelease APKでも直接起動を確認。
-- Galaxy／Pixelの実機確認、PRマージ、正式リリースは待ち。
+- My Notificationsの説明から「検索」を削除し、端末別の通知履歴を開く。既存actionIdは保持し、保存済み配置をそのまま利用可能。
+- Galaxyは設定「システム設定 & ツール」でNotiStar優先／システム標準を選び、再起動・JSONバックアップ／復元後も保持。NotiStarが使えなければ標準通知履歴へ切り替える。
+- PixelなどはGoodPixel通知一覧を優先し、未導入・無効・非対応なら標準通知履歴へ切り替える。Galaxy用の設定を他端末へ復元しても影響させない。
+- 設定に共通の「通知履歴を開く」ボタンを追加。HOME復帰では起動元ページを維持。
+- 本体v1.3.9-preview.2 / Build 44。設定上下の共通更新情報を更新。GoodPixel・Companionの変更／更新なし。
+- 検証: ユニットテスト156件成功（端末別優先順位・Galaxy選択・旧設定の初期値・JSON保持を含む）。Debug / Releaseビルド成功。APK内部バージョンと既存公開版との署名一致を確認。Android 15エミュレーターで設定ボタンからGoodPixelを起動し、GoodPixel無効時に標準通知履歴を起動することを確認。署名付きReleaseでも保存済みMy Notificationsから両方の起動先を確認。無効化は復元済み。
+- GalaxyのNotiStar起動先と、Galaxy／Pixelの標準通知履歴のIntent解決をADBで確認。Galaxy・Pixelへpreview.1を導入済み。preview.2のGalaxy設定操作・保存／復元・両方の導線・戻り先の実機確認、PRマージ・正式リリースは待ち。
 
 ### ドキュメント（2026-10-06）
 

@@ -33,7 +33,7 @@ enum class LauncherAction(
     MY_NOTIFICATIONS(
         actionId = "launcher://action/my_notifications",
         title = "My Notifications (通知履歴)",
-        subtitle = "GoodPixelの通知一覧を開く",
+        subtitle = "端末に合った通知履歴を開く",
         emojiIcon = "🔔",
         companionPackageName = "com.example.goodpixel",
         companionActivityName = "com.example.goodpixel.ui.notilog.NotiLogActivity"

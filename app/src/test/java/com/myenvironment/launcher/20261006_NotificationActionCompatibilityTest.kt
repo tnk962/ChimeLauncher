@@ -6,7 +6,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NotificationActionCompatibilityTest {
-    @Test fun oldSavedNotificationActionUsesGoodPixelWithoutRewritingLayout() {
+    @Test fun oldSavedNotificationActionKeepsIdentityAndOtherDeviceEndpoint() {
         val saved = """{"id":"old-notifications","pageId":"home","type":"ACTION","packageName":"com.myenvironment.notifications","targetUri":"launcher://action/my_notifications","label":"My Notifications (通知履歴)","compact":{"x":1,"y":2}}"""
         val item = Json.decodeFromString<LayoutItem>(saved)
         val action = LauncherAction.fromActionId(item.targetUri)!!

@@ -50,12 +50,12 @@ Google Play を経由せず、GitHub の **Releases** ページから APK ファ
 
 ---
 
-## 次期版 v1.3.9-preview.1：GoodPixelの通知一覧
+## 次期版 v1.3.9-preview.2：端末別の通知履歴
 
-- 「アイテム追加」→ActionのMy Notificationsから「検索」の説明を外し、GoodPixelの通知一覧へ直接開きます。既存のMy Notifications配置もそのまま使えます。
-- 設定の「システム設定 & ツール」に「GoodPixelの通知一覧を開く」ボタンを追加します。
-- GoodPixelが未導入・無効なら導入／有効化を案内し、対応する画面を開けない版では更新を案内します。Android標準通知履歴への置き換えは行いません。
-- GoodPixel側は変更せず、公開済みの通知ログActivityを利用します。通知内容の記録や権限設定はGoodPixel側で行います。
+- 「アイテム追加」→ActionのMy Notificationsから「検索」の説明を外し、端末に合った通知履歴を開きます。既存の配置もそのまま使えます。
+- 設定の「システム設定 & ツール」に「通知履歴を開く」ボタンを追加します。Galaxyでは同じ場所で「NotiStar優先／システム標準」を選んで保存できます。NotiStarが使えない場合は標準通知履歴へ切り替えます。
+- PixelなどではGoodPixelの通知一覧を優先し、未導入・無効・非対応なら標準通知履歴へ切り替えます。
+- Galaxyの選択は再起動・JSONバックアップ後も保持します。Galaxyの設定を他の端末へ復元しても、他の端末ではGoodPixel優先になります。GoodPixelとCompanionの更新は不要です。
 
 ## v1.3.8：ホーム・Dockのフォルダ
 
